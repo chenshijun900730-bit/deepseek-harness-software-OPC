@@ -54,29 +54,26 @@
   let agentTotal = 0
   let detail = null
   let confirmAction = null
-  let canvasOpen = false
+  let canvasOpen = true
 
   const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
   pill.addEventListener('click', function () { open = true; render() })
 
-  const panelSize = { w: 640, h: null }
-  const panel = el('div', { width: panelSize.w + 'px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#111827', border: '1px solid #374151', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)', overflow: 'hidden', position: 'relative' })
+  // 默认即最大：贴近视口的宽高，四边 + 右下角可拖拽缩放
+  function maxPanelSize() {
+    const vw = window.innerWidth || 1600
+    const vh = window.innerHeight || 1000
+    return { w: Math.max(520, Math.min(1320, vw - 320)), h: Math.max(420, Math.min(920, vh - 90)) }
+  }
+  const initial = maxPanelSize()
+  const panelSize = { w: initial.w, h: initial.h }
+  const panel = el('div', { width: panelSize.w + 'px', height: panelSize.h + 'px', maxHeight: 'none', display: 'flex', flexDirection: 'column', background: '#111827', border: '1px solid #374151', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)', overflow: 'hidden', position: 'relative' })
   const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #1f2937' })
   const title = el('span', { fontWeight: '700', fontSize: '15px' }, '\u{1F3E2} Software Company')
   const headerBtns = el('div', { display: 'flex', gap: '6px' })
-  const presetW = function (label, w) {
-    const b = el('button', btnStyle(panelSize.w === w && panelSize.h === null ? '#f59e0b' : '#64748b'), label)
-    b.addEventListener('click', function () { panelSize.w = w; panelSize.h = null; applySize(); render() })
-    return b
-  }
-  headerBtns.appendChild(presetW('窄', 380)); headerBtns.appendChild(presetW('中', 520)); headerBtns.appendChild(presetW('宽', 700))
   const refreshBtn = el('button', btnStyle('#94a3b8'), '\u21BB')
   const canvasBtn = el('button', btnStyle(canvasOpen ? '#f59e0b' : '#94a3b8'), '\u{1F5FA} \u753B\u5E03')
-  canvasBtn.addEventListener('click', function () {
-    canvasOpen = !canvasOpen
-    if (canvasOpen && panelSize.w < 700) { panelSize.w = 700; applySize() }
-    render()
-  })
+  canvasBtn.addEventListener('click', function () { canvasOpen = !canvasOpen; render() })
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
   closeBtn.addEventListener('click', function () { open = false; render() })
@@ -92,34 +89,85 @@
   canvasBar.children[1].addEventListener('click', function () { canvasOpen = false; render() })
   const canvasFrame = document.createElement('iframe')
   canvasFrame.setAttribute('title', '总监大画布')
-  canvasFrame.style.cssText = 'width:100%;height:620px;border:0;display:block;background:#0b0f19'
+  canvasFrame.style.cssText = 'width:calc(100% - 8px);height:620px;border:0;display:block;background:#0b0f19;margin:0 4px'
   canvasWrap.appendChild(canvasBar)
   canvasWrap.appendChild(canvasFrame)
   function mountCanvas(mount) {
     if (mount) {
       canvasWrap.style.display = 'block'
       if (canvasFrame.getAttribute('src') !== '/company') canvasFrame.setAttribute('src', '/company')
+      syncCanvasHeight()
     } else {
       canvasWrap.style.display = 'none'
       if (canvasFrame.getAttribute('src') === '/company') canvasFrame.removeAttribute('src')
     }
+  }
+  function syncCanvasHeight() {
+    canvasFrame.style.height = Math.max(420, (panelSize.h || 620) - 150) + 'px'
   }
 
   const tabs = el('div', { display: 'flex', gap: '4px', padding: '8px 10px 0' })
   const body = el('div', { padding: '10px', overflowY: 'auto', overflowX: 'hidden', flex: '1', minHeight: '60px' })
   const footer = el('div', { padding: '7px 12px', borderTop: '1px solid #1f2937', fontSize: '10px', color: '#6b7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, [
     el('span', null, '批准门禁 · 合同冻结 · 所有权互斥 · FAIL→全新 Repair Generator · 2修1重规划后暂停'),
-    el('span', { fontSize: '10px', color: '#4b5563' }, '拖右下角可调大小'),
+    el('span', { fontSize: '10px', color: '#4b5563' }, '拖任意边界调整大小'),
   ])
   panel.appendChild(header); panel.appendChild(tabs); panel.appendChild(body); panel.appendChild(footer)
 
-  // ---------- 面板尺寸 ----------
+  // ---------- 面板尺寸：四边 + 右下角拖拽缩放 ----------
   function applySize() {
     panel.style.width = panelSize.w + 'px'
-    if (panelSize.h !== null) { panel.style.height = panelSize.h + 'px'; panel.style.maxHeight = 'none' }
-    else { panel.style.height = ''; panel.style.maxHeight = '85vh' }
+    panel.style.height = panelSize.h + 'px'
+    panel.style.maxHeight = 'none'
+    syncCanvasHeight()
   }
-  const grip = el('div', { position: 'absolute', right: '0', bottom: '0', width: '22px', height: '22px', cursor: 'nwse-resize', zIndex: '10' })
+  function clampSize(w, h) {
+    const vw = window.innerWidth || 1600
+    const vh = window.innerHeight || 1000
+    return { w: Math.max(420, Math.min(vw - 40, w)), h: Math.max(240, Math.min(vh - 40, h)) }
+  }
+  let panelTop = 12
+  function startResize(e, mode) {
+    e.preventDefault()
+    // 拖拽期间 iframe 对鼠标事件穿透：否则拖进画布区域后 mousemove 会被 iframe 文档吞掉
+    canvasFrame.style.pointerEvents = 'none'
+    const x0 = e.clientX, y0 = e.clientY, w0 = panelSize.w, h0 = panelSize.h, t0 = panelTop
+    function onMove(ev) {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0
+      let w = w0, h = h0
+      if (mode === 'e' || mode === 'se') w = w0 + dx
+      if (mode === 'w') w = w0 - dx
+      if (mode === 's' || mode === 'se') h = h0 + dy
+      if (mode === 'n') {
+        panelTop = Math.max(12, Math.min(t0 + dy, t0 + h0 - 240))
+        h = h0 - (panelTop - t0)
+        root.style.top = panelTop + 'px'
+      }
+      const c = clampSize(w, h)
+      panelSize.w = c.w; panelSize.h = c.h
+      applySize()
+    }
+    function onUp() { canvasFrame.style.pointerEvents = 'auto'; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+  function edgeHandle(cursor, mode) {
+    const h = el('div', { position: 'absolute', zIndex: '12', background: 'transparent' })
+    h.style.cursor = cursor
+    h.addEventListener('mousedown', function (e) { startResize(e, mode) })
+    return h
+  }
+  const edgeLeft = edgeHandle('ew-resize', 'w')
+  const edgeRight = edgeHandle('ew-resize', 'e')
+  const edgeTop = edgeHandle('ns-resize', 'n')
+  const edgeBottom = edgeHandle('ns-resize', 's')
+  Object.assign(edgeLeft.style, { left: '-4px', top: '30px', bottom: '8px', width: '8px' })
+  Object.assign(edgeRight.style, { right: '-4px', top: '30px', bottom: '8px', width: '8px' })
+  Object.assign(edgeTop.style, { top: '-4px', left: '8px', right: '8px', height: '8px' })
+  Object.assign(edgeBottom.style, { bottom: '-4px', left: '8px', right: '8px', height: '8px' })
+  panel.appendChild(edgeLeft); panel.appendChild(edgeRight); panel.appendChild(edgeTop); panel.appendChild(edgeBottom)
+
+  const grip = el('div', { position: 'absolute', right: '-6px', bottom: '-6px', width: '26px', height: '26px', cursor: 'nwse-resize', zIndex: '12' })
   const gripSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   gripSvg.setAttribute('width', '14'); gripSvg.setAttribute('height', '14'); gripSvg.setAttribute('viewBox', '0 0 14 14')
   gripSvg.style.position = 'absolute'; gripSvg.style.right = '3px'; gripSvg.style.bottom = '3px'; gripSvg.style.pointerEvents = 'none'
@@ -128,18 +176,7 @@
   gripPath.setAttribute('stroke', '#4b5563'); gripPath.setAttribute('stroke-width', '1.5'); gripPath.setAttribute('fill', 'none')
   gripSvg.appendChild(gripPath)
   grip.appendChild(gripSvg)
-  grip.addEventListener('mousedown', function (e) {
-    e.preventDefault()
-    const x0 = e.clientX, y0 = e.clientY, w0 = panelSize.w, h0 = panelSize.h === null ? 520 : panelSize.h
-    function onMove(ev) {
-      panelSize.w = Math.max(340, Math.min(820, w0 + (ev.clientX - x0)))
-      panelSize.h = Math.max(260, Math.min(860, h0 + (y0 - ev.clientY)))
-      applySize()
-    }
-    function onUp() { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  })
+  grip.addEventListener('mousedown', function (e) { startResize(e, 'se') })
   panel.appendChild(grip)
   applySize()
 
