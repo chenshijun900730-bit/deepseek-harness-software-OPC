@@ -271,14 +271,15 @@
       if (s.title === title && scope !== s.sessionId) { applyScope(s.sessionId, true); return }
     }
   }
-  // 侧栏选中态变化即时触发（不依赖 4s 轮询）；仅监听 class/aria-selected 属性变更
+  // 侧栏选中态变化即时触发（不依赖 4s 轮询）：监听 class/aria-selected 变更与
+  // 会话树节点插入（首屏渲染时选中态随节点一起插入，没有属性变更事件）。
   function watchSessionSelection() {
     let obs = null
     function start() {
       if (typeof MutationObserver === 'undefined') return
       if (obs) { try { obs.disconnect() } catch (e) {} }
       obs = new MutationObserver(function () { autoScope() })
-      obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class', 'aria-selected'] })
+      obs.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'aria-selected'] })
     }
     if (document.body) start()
     else document.addEventListener('DOMContentLoaded', start)
