@@ -240,7 +240,7 @@ export default {
     let sessionsCache = { at: 0, rows: [] }
     async function sessionsSnapshot() {
       const nowMs = Date.now()
-      if (nowMs - sessionsCache.at < 30000) return sessionsCache.rows
+      if (nowMs - sessionsCache.at < 10000) return sessionsCache.rows
       const tasks = await listAllTasks()
       const sq = ctx.get('sessionQuery')
       const groups = new Map()
@@ -251,11 +251,32 @@ export default {
         g.taskIds.push(t.taskId)
         groups.set(key, g)
       }
+      // 并入尚无公司任务的顶层会话：侧栏点击任意会话时，面板/画布都能按标题
+      // 命中并切换 scope（否则无任务会话不在清单里，自动跟随会静默失效）。
+      if (sq !== undefined) {
+        try {
+          const records = await sq.listSessions()
+          for (const rec of records || []) {
+            const h = rec && rec.header
+            const id = h && h.id
+            if (!id) continue
+            if (h.delegationDepth || h.origin === 'subagent') continue // 只列顶层会话
+            const key = 's:' + id
+            if (groups.has(key)) continue
+            let title = String(id).slice(0, 8)
+            try {
+              const t = await sq.readTitle(id)
+              if (t && typeof t.title === 'string' && t.title) title = t.title
+            } catch (e) {}
+            groups.set(key, { sessionId: id, project: typeof h.cwd === 'string' ? h.cwd : '', tasks: 0, taskIds: [], title })
+          }
+        } catch (e) { /* listSessions 不可用时退化为仅任务会话 */ }
+      }
       const rows = []
       for (const g of groups.values()) {
-        let title = g.sessionId ? String(g.sessionId).slice(0, 8) : '（未归属会话 · 按目录）'
+        let title = g.title || (g.sessionId ? String(g.sessionId).slice(0, 8) : '（未归属会话 · 按目录）')
         let cwd = g.project
-        if (g.sessionId && sq !== undefined) {
+        if (g.sessionId && sq !== undefined && g.title === undefined) {
           try {
             const t = await sq.readTitle(g.sessionId)
             if (t && typeof t.title === 'string' && t.title) title = t.title

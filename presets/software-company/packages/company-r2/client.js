@@ -76,6 +76,9 @@
   const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #1f2937' })
   const title = el('span', { fontWeight: '700', fontSize: '15px' }, '\u{1F3E2} Software Company')
   const headerBtns = el('div', { display: 'flex', gap: '6px' })
+  const scopeSel = el('select', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '6px', padding: '5px 8px', fontSize: '12px', fontWeight: '600', maxWidth: '240px' })
+  scopeSel.title = '会话范围'
+  scopeSel.addEventListener('change', function () { applyScope(scopeSel.value || null, false) })
   const refreshBtn = el('button', btnStyle('#94a3b8'), '\u21BB')
   const canvasBtn = el('button', btnStyle(canvasOpen ? '#f59e0b' : '#94a3b8'), '\u{1F5FA} \u753B\u5E03')
   canvasBtn.addEventListener('click', function () { canvasOpen = !canvasOpen; render() })
@@ -95,6 +98,8 @@
   const canvasFrame = document.createElement('iframe')
   canvasFrame.setAttribute('title', '总监大画布')
   canvasFrame.style.cssText = 'width:calc(100% - 8px);height:620px;border:0;display:block;background:#0b0f19;margin:0 4px'
+  // 画布加载完成后同步当前 scope（避免画布首次打开短暂停留在「全部」）
+  canvasFrame.addEventListener('load', function () { notifyCanvas(!scopeChosen) })
   canvasWrap.appendChild(canvasBar)
   canvasWrap.appendChild(canvasFrame)
   function mountCanvas(mount) {
@@ -220,15 +225,54 @@
     // 会话清单 + 自动识别当前对话框
     try { const sl = await getJSON('/company-api/sessions'); if (Array.isArray(sl)) { sessions = sl; autoScope(); renderScopeOptions() } } catch (e) {}
   }
+  // ---------- 会话级隔离：侧栏点击切换 → 面板/画布自动跟随 ----------
+  // 手动选择 scope（下拉/画布 chip）在下次侧栏切换前保持锁定；侧栏选中行变化
+  // 一律解除锁定并跟随新会话（用户核心诉求：点击不同会话自动切换）。
+  let lastParentTitle = null
+  function selectedSessionTitle() {
+    try {
+      const sel = document.querySelector('.pqeL5W_sessionRow.pqeL5W_selected .pqeL5W_title')
+      if (sel && sel.textContent) return sel.textContent.trim()
+    } catch (e) {}
+    return null
+  }
+  function notifyCanvas(auto) {
+    try {
+      if (canvasFrame && canvasFrame.contentWindow) {
+        canvasFrame.contentWindow.postMessage({ type: 'company-scope', sessionId: scope, auto: !!auto }, window.location.origin)
+      }
+    } catch (e) {}
+  }
+  function applyScope(next, auto) {
+    scope = next
+    scopeChosen = !auto
+    refreshSig = ''
+    notifyCanvas(auto)
+    refreshAll()
+    renderScopeOptions()
+  }
   function autoScope() {
-    if (scopeChosen) return
-    let title = null
-    try { const sel = document.querySelector('.pqeL5W_sessionRow.pqeL5W_selected .pqeL5W_title'); if (sel && sel.textContent) title = sel.textContent.trim() } catch (e) {}
+    const title = selectedSessionTitle()
     if (!title) return
+    if (title !== lastParentTitle) { lastParentTitle = title; scopeChosen = false } // 侧栏切换 → 恢复自动跟随
+    if (scopeChosen) return
     for (const s of sessions) {
-      if (s.title === title && scope !== s.sessionId) { scope = s.sessionId; refreshSig = ''; refreshAll(); return }
+      if (s.title === title && scope !== s.sessionId) { applyScope(s.sessionId, true); return }
     }
   }
+  // 侧栏选中态变化即时触发（不依赖 4s 轮询）；仅监听 class/aria-selected 属性变更
+  function watchSessionSelection() {
+    let obs = null
+    function start() {
+      if (typeof MutationObserver === 'undefined') return
+      if (obs) { try { obs.disconnect() } catch (e) {} }
+      obs = new MutationObserver(function () { autoScope() })
+      obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class', 'aria-selected'] })
+    }
+    if (document.body) start()
+    else document.addEventListener('DOMContentLoaded', start)
+  }
+  watchSessionSelection()
   function renderScopeOptions() {
     if (!scopeSel) return
     const val = scope || ''

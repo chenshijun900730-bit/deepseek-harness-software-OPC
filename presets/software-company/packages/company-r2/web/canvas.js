@@ -763,7 +763,8 @@
     }
     chip('🏢 全部', null, STATE.scope === null)
     ;(STATE.sessions || []).forEach(function (s) {
-      chip('📂 ' + (s.title || String(s.sessionId || '').slice(0, 8)) + ' · ' + s.taskCount, s.sessionId, STATE.scope === s.sessionId)
+      // sessionId 为 null 的「按目录」伪会话不与 全部 态重复点亮
+      chip('📂 ' + (s.title || String(s.sessionId || '').slice(0, 8)) + ' · ' + s.taskCount, s.sessionId, s.sessionId !== null && STATE.scope === s.sessionId)
     })
   }
   window.__selectScope = function (id) {
@@ -776,10 +777,17 @@
     renderChips(); renderScopeChips()
     poll()
   }
+  // 父窗口（DSH 侧栏）会话切换：解除手动锁定并跟随新会话；手动选中的 chip
+  // 在下次侧栏切换前保持锁定（点击不同会话总是自动切换）。
+  var lastParentTitle = detectParentSessionTitle()
   function autoDetectScope(sessions) {
-    if (STATE.scopeChosen) return false
     var title = detectParentSessionTitle()
     if (!title) return false
+    if (title !== lastParentTitle) {
+      lastParentTitle = title
+      STATE.scopeChosen = false // 侧栏点击了别的会话 → 恢复自动跟随
+    }
+    if (STATE.scopeChosen) return false
     var hit = null
     sessions.forEach(function (s) { if (s.title === title) hit = s.sessionId })
     if (hit && STATE.scope !== hit) {
@@ -788,10 +796,30 @@
       STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
       STATE.seq = 0
       var ev = $('evList'); if (ev) ev.innerHTML = ''
+      renderScopeChips()
       return true
     }
     return false
   }
+
+  // ================= 面板（父窗口）即时 scope 切换 =================
+  // 面板侧栏自动跟随 / 手动选择都会 postMessage：画布立即切换，不等 2s 轮询；
+  // auto=false（面板手动选择）保持锁定，auto=true（跟随侧栏）解除锁定。
+  window.addEventListener('message', function (ev) {
+    if (!ev || !ev.data || ev.data.type !== 'company-scope') return
+    if (ev.source !== window.parent) return
+    var sid = ev.data.sessionId || null
+    if (sid === STATE.scope) return
+    STATE.scope = sid
+    STATE.scopeChosen = !ev.data.auto
+    if (!ev.data.auto) lastParentTitle = detectParentSessionTitle()
+    STATE.focusTask = null
+    STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
+    STATE.seq = 0
+    var evl = $('evList'); if (evl) evl.innerHTML = ''
+    renderChips(); renderScopeChips()
+    poll()
+  })
 
   function poll() {
     api('/company-api/events?seq=' + STATE.seq + scopeQuery()).then(function (d) {
