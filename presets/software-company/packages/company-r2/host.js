@@ -243,6 +243,20 @@ export default {
       if (nowMs - sessionsCache.at < 10000) return sessionsCache.rows
       const tasks = await listAllTasks()
       const sq = ctx.get('sessionQuery')
+      // 会话头信息一次性取齐：listSessions 只读头（便宜）；标题走 cachedTitle，
+      // 绝不逐会话 readSession/readTitle（整日志重放，2s 轮询下会把进程打挂）。
+      const sessionMeta = new Map()
+      if (sq !== undefined) {
+        try {
+          const records = await sq.listSessions()
+          for (const rec of records || []) {
+            const h = rec && rec.header
+            if (!h || typeof h.id !== 'string') continue
+            if (h.delegationDepth || h.origin === 'subagent') continue // 只列顶层会话
+            sessionMeta.set(h.id, { cwd: typeof h.cwd === 'string' ? h.cwd : '', title: await cachedTitle(sq, h.id) })
+          }
+        } catch (e) { /* listSessions 不可用时退化为仅任务会话 */ }
+      }
       const groups = new Map()
       for (const t of tasks) {
         const key = t.sessionId ? 's:' + t.sessionId : 'd:' + t.project
@@ -253,35 +267,24 @@ export default {
       }
       // 并入尚无公司任务的顶层会话：侧栏点击任意会话时，面板/画布都能按标题
       // 命中并切换 scope（否则无任务会话不在清单里，自动跟随会静默失效）。
-      if (sq !== undefined) {
-        try {
-          const records = await sq.listSessions()
-          for (const rec of records || []) {
-            const h = rec && rec.header
-            const id = h && h.id
-            if (!id) continue
-            if (h.delegationDepth || h.origin === 'subagent') continue // 只列顶层会话
-            const key = 's:' + id
-            if (groups.has(key)) continue
-            let title = String(id).slice(0, 8)
-            try {
-              const t = await sq.readTitle(id)
-              if (t && typeof t.title === 'string' && t.title) title = t.title
-            } catch (e) {}
-            groups.set(key, { sessionId: id, project: typeof h.cwd === 'string' ? h.cwd : '', tasks: 0, taskIds: [], title })
-          }
-        } catch (e) { /* listSessions 不可用时退化为仅任务会话 */ }
+      for (const [id, meta] of sessionMeta) {
+        const key = 's:' + id
+        if (groups.has(key)) continue
+        groups.set(key, { sessionId: id, project: meta.cwd, tasks: 0, taskIds: [] })
       }
       const rows = []
       for (const g of groups.values()) {
-        let title = g.title || (g.sessionId ? String(g.sessionId).slice(0, 8) : '（未归属会话 · 按目录）')
+        let title = g.sessionId ? String(g.sessionId).slice(0, 8) : '（未归属会话 · 按目录）'
         let cwd = g.project
-        if (g.sessionId && sq !== undefined && g.title === undefined) {
+        const meta = g.sessionId ? sessionMeta.get(g.sessionId) : undefined
+        if (meta) {
+          if (meta.title) title = meta.title
+          if (meta.cwd) cwd = meta.cwd
+        } else if (g.sessionId && sq !== undefined) {
+          // listSessions 不可用时的兜底：只读标题（仍走缓存），cwd 用任务目录
           try {
-            const t = await sq.readTitle(g.sessionId)
-            if (t && typeof t.title === 'string' && t.title) title = t.title
-            const snap = await sq.readSession(g.sessionId)
-            if (snap && snap.header && typeof snap.header.cwd === 'string') cwd = snap.header.cwd
+            const t = await cachedTitle(sq, g.sessionId)
+            if (t) title = t
           } catch (e) {}
         }
         rows.push({ sessionId: g.sessionId, title, cwd, taskCount: g.tasks, taskIds: g.taskIds, project: g.project })
@@ -658,6 +661,34 @@ export default {
       return undefined
     }
     // 已结束子代理的模型来源：存活会话取 requestHeader，否则从持久日志扫 request/context（provider+model 真实路由记录）
+    // ================= 会话标题缓存 =================
+    // readTitle 对已持久化会话会整日志解压+重放校验（本机 96 份会话日志 / 67MB，
+    // 单份可达 13MB），tokensSnapshot 每 2-4s 被画布/面板轮询时若逐行 readTitle，
+    // 进程会被压满（CPU 100%+、接口 60s+ 无响应）。标题 60s 内稳定，缓存即可。
+    const titleCache = new Map()
+    async function cachedTitle(sq, sid) {
+      const key = String(sid)
+      const c = titleCache.get(key)
+      if (c !== undefined && Date.now() - c.at < 60000) return c.title
+      // 已持久化（非存活）会话的 readTitle 会整日志解压+重放校验（本机 96 份日志
+      // / 67MB，单份可达 13MB）；画布/面板每 2-4s 轮询时读它会把进程打挂。
+      // 只读存活会话标题（内存折叠，便宜）；持久会话用 id 前缀兜底，点击打开后
+      // 变存活即在下个缓存周期（≤60s）补上真实标题。
+      let live = false
+      try {
+        const sessions = ctx.get('sessions')
+        live = !!(sessions && sessions.get(sid))
+      } catch (e) {}
+      let title = ''
+      if (live) {
+        try {
+          const t = await sq.readTitle(sid)
+          if (t && typeof t.title === 'string' && t.title) title = t.title
+        } catch (e) {}
+      }
+      titleCache.set(key, { at: Date.now(), title })
+      return title
+    }
     const persistedModelCache = new Map()
     async function resolvePersistedModel(sid) {
       try {
@@ -669,18 +700,8 @@ export default {
           const live = sessions ? sessions.get(sid) : undefined
           if (live) found = modelOfSession(live)
         } catch (e) {}
-        if (found === undefined) {
-          const sq = ctx.get('sessionQuery')
-          if (sq !== undefined) {
-            const snap = await sq.readSession(sid)
-            if (snap && Array.isArray(snap.events)) {
-              for (let i = snap.events.length - 1; i >= 0; i--) {
-                const e = snap.events[i]
-                if (e && e.type === 'request/context' && e.data && e.data.model) { found = { provider: String(e.data.provider || ''), model: String(e.data.model) }; break }
-              }
-            }
-          }
-        }
+        // 不再为已持久化会话整日志扫描模型（同 readTitle：重放校验会打挂进程）。
+        // 持久行模型显示「待定」，重新打开该会话（变存活）后下一缓存周期补上。
         persistedModelCache.set(sid, { at: Date.now(), model: found ? found.model : '', provider: found ? found.provider : '' })
         return found
       } catch (e) { return undefined }
@@ -824,7 +845,21 @@ export default {
       return out
     }
 
+    // 并发去重：画布(2s)/面板(4s)/tokens 接口同时触发时共享同一次快照计算，
+    // 避免慢快照请求堆叠把事件循环压垮。
+    let tokensInFlight = null
     async function tokensSnapshot() {
+      if (tokensInFlight !== null) return tokensInFlight
+      tokensInFlight = (async function () {
+        try {
+          return await computeTokensSnapshot()
+        } finally {
+          tokensInFlight = null
+        }
+      })()
+      return tokensInFlight
+    }
+    async function computeTokensSnapshot() {
       const agents = ctx.get('agents')
       const tm = ctx.get('tokenMeter')
       const sq = ctx.get('sessionQuery')
@@ -867,8 +902,8 @@ export default {
         for (const r of rows) {
           if (r.error || !r.id) continue
           try {
-            const t = await sq.readTitle(r.id)
-            if (t && typeof t.title === 'string' && t.title) r.title = t.title
+            const t = await cachedTitle(sq, r.id)
+            if (t) r.title = t
           } catch (e) {}
         }
       }
@@ -1071,10 +1106,29 @@ export default {
       return { contracts: out }
     }
 
+    // tokensSnapshot 偶发慢时画布接口不得陪挂：3s 超时改用上一次成功快照兜底
+    let lastTokensFallback = { rows: [] }
     async function canvasSnapshot(q) {
       const scope = q ? q.get('scope') : undefined
-      const tokens = await tokensSnapshot().catch(function () { return { rows: [] } })
-      const dispatches = await listDispatchRecords()
+      let tokens = null
+      try {
+        tokens = await Promise.race([
+          tokensSnapshot(),
+          new Promise(function (resolve) { setTimeout(function () { resolve(null) }, 3000) }),
+        ])
+      } catch (e) { tokens = null }
+      if (tokens === null || !Array.isArray(tokens.rows)) tokens = lastTokensFallback
+      else lastTokensFallback = tokens
+      // 派工补全首次可能触发整日志读（一次性，随后走落盘 sidecar）：
+      // 4s 超时先返回未补全数据，后台补全落盘后下一轮轮询自然拿到完整数据。
+      let dispatches = null
+      try {
+        dispatches = await Promise.race([
+          listDispatchRecords(),
+          new Promise(function (resolve) { setTimeout(function () { resolve(null) }, 4000) }),
+        ])
+      } catch (e) { dispatches = null }
+      if (dispatches === null) dispatches = []
       const attributed = attributeUsage(tokens.rows || [], dispatches)
       const allTasks = await listAllTasks()
       const ids = await scopedTaskIds(scope, allTasks)
@@ -1130,6 +1184,21 @@ export default {
       return base + '/.company-harness/dispatches.jsonl'
     }
     async function recordDispatch(d) { appendEvent(await dispatchFile(), d) }
+    // ================= 派工记录补全缓存（持久化） =================
+    // 补全需读子代理整会话日志（解压+重放校验）；每 2s 画布轮询时逐个读会打挂进程。
+    // 内存缓存 120s + 落盘 sidecar（跨重启）：每个派工记录最多读一次日志。
+    let dispatchEnrichMap = {}
+    async function loadDispatchEnrichMap() {
+      try {
+        const t = await readTextAt(await defaultProjectDir() + '/.company-harness/dispatch-enrich.json')
+        if (t) { const m = JSON.parse(t); if (m && typeof m === 'object') dispatchEnrichMap = m }
+      } catch (e) {}
+    }
+    async function saveDispatchEnrich(sid, rec) {
+      dispatchEnrichMap[sid] = rec
+      try { nodeFs.writeFileSync(await defaultProjectDir() + '/.company-harness/dispatch-enrich.json', JSON.stringify(dispatchEnrichMap)) } catch (e) {}
+    }
+    loadDispatchEnrichMap()
     // 派工记录补全：从子代理会话首条用户消息解析「…软件公司 Harness 中的 **角色**…（任务 TASK-…）」
     // 得到 department（角色 id）与 taskId。缓存 120s，避免 2s 轮询反复读会话日志。
     const dispatchEnrichCache = new Map()
@@ -1144,7 +1213,9 @@ export default {
     }
     async function enrichDispatch(d) {
       if (!d || !d.sessionId) return d
-      const cached = dispatchEnrichCache.get(d.sessionId)
+      const sid = d.sessionId
+      // 1) 内存缓存（120s）
+      const cached = dispatchEnrichCache.get(sid)
       if (cached !== undefined && Date.now() - cached.at < 120000) {
         d.department = cached.dept
         d.taskId = cached.taskId
@@ -1152,12 +1223,26 @@ export default {
         d.durationMs = cached.durationMs
         return d
       }
+      // 2) 落盘 sidecar（跨重启，读一次日志后永久复用）
+      const stored = dispatchEnrichMap[sid]
+      if (stored !== undefined && stored.dept !== undefined || stored !== undefined && stored.taskId !== undefined) {
+        dispatchEnrichCache.set(sid, { at: Date.now(), dept: stored.dept, taskId: stored.taskId, prompt: stored.prompt, durationMs: stored.durationMs })
+        d.department = stored.dept
+        d.taskId = stored.taskId
+        d.prompt = stored.prompt
+        d.durationMs = stored.durationMs
+        return d
+      }
       let dept, taskId, prompt, startTime, endTime
+      // 3) 存活会话：扫内存事件（便宜，无解压/重放）
+      let live = null
       try {
-        const sq = ctx.get('sessionQuery')
-        if (sq !== undefined) {
-          const snap = await sq.readSession(d.sessionId)
-          const evs = (snap && snap.events) || []
+        const sessions = ctx.get('sessions')
+        live = sessions ? sessions.get(sid) : undefined
+      } catch (e) {}
+      if (live) {
+        try {
+          const evs = (live.events || [])
           for (const e of evs) {
             if (e && typeof e.time === 'number') {
               if (startTime === undefined || e.time < startTime) startTime = e.time
@@ -1176,10 +1261,40 @@ export default {
             }
             if (dept && taskId && prompt) break
           }
-        }
-      } catch (e) {}
+        } catch (e) {}
+      }
+      // 4) 已持久化且 sidecar 无记录：仅当必要时读一次日志（新装/升级兜底），读完落盘
+      if (!live && (dept === undefined || taskId === undefined)) {
+        try {
+          const sq = ctx.get('sessionQuery')
+          if (sq !== undefined) {
+            const snap = await sq.readSession(sid)
+            const evs = (snap && snap.events) || []
+            for (const e of evs) {
+              if (e && typeof e.time === 'number') {
+                if (startTime === undefined || e.time < startTime) startTime = e.time
+                if (endTime === undefined || e.time > endTime) endTime = e.time
+              }
+              if (e && e.type === 'user/message' && e.data && Array.isArray(e.data.content)) {
+                for (const c of e.data.content) {
+                  if (c && typeof c.text === 'string') {
+                    if (!prompt && c.text.length > 40) prompt = c.text
+                    const m = c.text.match(/软件公司 Harness 中的\s*\**([^*\n]+)\**/)
+                    if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
+                    const t = c.text.match(/(?:（任务|任务编号[：:])\s*([A-Z][A-Z0-9-]*)/)
+                    if (t && !taskId) taskId = t[1]
+                  }
+                }
+              }
+              if (dept && taskId && prompt) break
+            }
+          }
+        } catch (e) {}
+      }
       const durationMs = (startTime !== undefined && endTime !== undefined) ? Math.max(0, endTime - startTime) : undefined
-      dispatchEnrichCache.set(d.sessionId, { at: Date.now(), dept, taskId, prompt, durationMs })
+      const rec = { dept, taskId, prompt, durationMs }
+      dispatchEnrichCache.set(sid, { at: Date.now(), dept, taskId, prompt, durationMs })
+      saveDispatchEnrich(sid, rec)
       d.department = dept
       d.taskId = taskId
       d.prompt = prompt

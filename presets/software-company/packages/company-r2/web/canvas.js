@@ -19,8 +19,14 @@
     blocked: { border: '#7f1d1d', bg: '#180909', color: '#fca5a5' },
   }
 
-  function api(path) {
-    return fetch(path, { cache: 'no-store' }).then(function (r) {
+  function api(path, timeoutMs) {
+    var ctl = typeof AbortController === 'undefined' ? null : new AbortController()
+    var timer = null
+    if (ctl !== null) {
+      timer = setTimeout(function () { try { ctl.abort() } catch (e) {} }, timeoutMs || 8000)
+    }
+    return fetch(path, { cache: 'no-store', signal: ctl ? ctl.signal : undefined }).then(function (r) {
+      if (timer) clearTimeout(timer)
       if (!r.ok) throw new Error('HTTP ' + r.status)
       // /company-api 只在公司引擎（Software Company 预置）挂载时注册；未挂载时
       // 请求落到宿主 SPA fallback，返回 HTML。此时 r.json() 会抛 SyntaxError 且
@@ -28,6 +34,10 @@
       var ct = String(r.headers.get('content-type') || '')
       if (ct.indexOf('json') === -1) throw new Error('engine-not-mounted (content-type=' + ct + ')')
       return r.json()
+    }, function (e) {
+      if (timer) clearTimeout(timer)
+      // 超时/中止归一为可识别错误：保留上一次数据，不弹「引擎未挂载」横幅
+      throw new Error((e && e.name === 'AbortError') ? 'timeout' : String((e && e.message) || e))
     })
   }
   function fmt(n) { return n >= 1000000 ? (n / 1000000).toFixed(2) + 'M' : (n / 1000).toFixed(1) + 'k' }
@@ -36,12 +46,29 @@
   // /company-api 由 Software Company 预置（按会话挂载）注册；仅宿主面板常驻。
   // 无公司会话时画布数据接口不可用 → 显示明确横幅（不再静默空白），数据恢复后自动隐藏。
   var engineDown = false
-  function showEngineDown(on) {
-    if (on === engineDown) return
+  var engineDownKind = ''
+  function showEngineDown(on, kind) {
+    if (on === engineDown && (!on || kind === engineDownKind)) return
     engineDown = on
+    engineDownKind = on ? (kind || 'down') : ''
     var b = $('engineBanner')
-    if (b) b.style.display = on ? 'block' : 'none'
+    if (!b) return
+    if (!on) { b.style.display = 'none'; return }
+    if (engineDownKind === 'slow') {
+      b.innerHTML = '🐢 数据更新超时：公司引擎繁忙（开发中的 token 快照可能较慢）。画布保留上一次数据，每 2s 自动重试；<br/>若长时间无数据，可关闭当前公司会话后新开一个公司会话让引擎热加载修复。'
+      b.style.background = '#1a1c10'
+      b.style.borderColor = '#a3a029'
+      b.style.color = '#e5e37a'
+    } else {
+      b.innerHTML = '⚠ 画布数据不可用：当前会话未挂载公司引擎（<code>/company-api</code> 无响应，返回的是宿主页面而非 JSON）。<br/>请在会话模式选择器中切换到 <b>Software Company 公司模式</b>（或打开一个公司会话），画布会每 2s 自动重试并开始拉取真实数据。'
+      b.style.background = '#2b1b10'
+      b.style.borderColor = '#b45309'
+      b.style.color = '#fdba74'
+    }
+    b.style.display = 'block'
   }
+  // 画布数据请求在飞标记：服务器慢时避免 2s 轮询把连接池/请求栈堆满
+  var canvasFetchPending = false
 
   function layout(nodes) {
     var pos = {}, placed = new Set(), rows = []
@@ -835,8 +862,11 @@
         if (ev.type === 'adjudication.decided') { var a = $('nd-adj'); if (a) a.remove() }
       })
     }).catch(function () {})
-    api('/company-api/canvas' + (STATE.scope ? '?scope=' + encodeURIComponent(STATE.scope) : '')).then(function (d) {
-      showEngineDown(false)
+    if (!canvasFetchPending) {
+      canvasFetchPending = true
+      api('/company-api/canvas' + (STATE.scope ? '?scope=' + encodeURIComponent(STATE.scope) : ''), 6000).then(function (d) {
+        canvasFetchPending = false
+        showEngineDown(false)
       STATE.tasks = d.tasks || []
       STATE.depts = d.depts || {}
       STATE.dispatchDepts = d.dispatchDepts || {}
@@ -880,9 +910,15 @@
         if (STATE.view === 'org') renderOrg()
       }
     }).catch(function (e) {
-      showEngineDown(true)
-      if (window.console) console.warn('[company-canvas] 数据接口不可用：', e && e.message ? e.message : e)
+      canvasFetchPending = false
+      var msg = e && e.message ? e.message : ''
+      // 超时 = 服务器慢：有数据时保留旧数据静默重试；尚无任何数据时亮「慢」横幅
+      if (msg.indexOf('engine-not-mounted') >= 0) showEngineDown(true, 'down')
+      else if (msg.indexOf('timeout') >= 0) showEngineDown(STATE.tasks.length === 0 && STATE.roles.length === 0, 'slow')
+      else showEngineDown(true, 'slow')
+      if (window.console) console.warn('[company-canvas] 数据接口异常：', msg)
     })
+    }
     // 会话清单 + 自动识别当前对话框（每个对话框一个 Company）
     api('/company-api/sessions').then(function (d) {
       STATE.sessions = Array.isArray(d) ? d : []
