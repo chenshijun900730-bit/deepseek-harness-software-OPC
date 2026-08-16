@@ -3,7 +3,7 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
+  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
@@ -217,8 +217,28 @@
   function deptCalls(id) {
     return (STATE.dispatches || []).filter(function (d) { return d.dept === id && (!STATE.focusTask || d.taskId === STATE.focusTask) })
   }
+  function orgSignature() {
+    var deptsSig = Object.keys(STATE.depts || {}).map(function (k) { return k + ':' + Math.round((STATE.depts[k].totalTokens || 0) / 1000) }).join(',')
+    return [STATE.focusTask || '', (STATE.dispatches || []).length, (STATE.roles || []).length, deptsSig].join('|')
+  }
+  function updateDeptBadges() {
+    ORG.forEach(function (o) {
+      var el = $('nd-dept-' + o.id)
+      if (!el) return
+      var d = STATE.depts[o.id] || {}
+      var t = el.querySelector('.dtok')
+      if (t) {
+        var txt = '⚡' + fmt(d.totalTokens || 0)
+        if (t.textContent !== txt) t.textContent = txt
+      }
+    })
+  }
   function renderOrg() {
     if (!cv) return
+    // 数据无变化时不整树重建（消除每 2s 轮询带来的闪动），只原位更新 token 徽标
+    var sig = orgSignature()
+    if (sig === STATE.orgSig) { updateDeptBadges(); return }
+    STATE.orgSig = sig
     cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
     cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
     var coord = $('nd-coord'); if (coord) coord.style.display = 'none'
@@ -236,7 +256,7 @@
       el.className = 'nd' + (st === 'working' ? ' work' : '')
       el.id = 'nd-dept-' + o.id
       el.style.cssText = 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w + 'px;border-color:' + s.border + ';background:' + s.bg + ';color:' + s.color
-      var toks = d.totalTokens ? ' · ⚡ ' + fmt(d.totalTokens) : ''
+      var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
       el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + toks + '</small>'
       el.addEventListener('click', function () { openOrgDept(o.id) })
       el.addEventListener('mouseenter', function (ev) {
@@ -348,26 +368,30 @@
   }
   function endDrag() { DRAG = null; document.removeEventListener('mousemove', onDrag); document.removeEventListener('mouseup', endDrag) }
 
-  var tok = { cur: 0, target: 0, anim: false }
+  var tok = { cur: 0, target: 0, started: false }
+  // 常驻缓动循环：向最新 target 平滑趋近；显示值不变时不重写文本（消除无谓的每帧 DOM 写入）
   function tickTokens() {
-    if (tok.anim) return
-    var from = tok.cur, to = tok.target, t0 = performance.now(), dur = 1900
-    tok.anim = true
-    function step(t) {
-      var p = Math.min(1, (t - t0) / dur)
-      var v = from + (to - from) * p
-      var el = $('tokTotal'); if (el) el.textContent = fmt(v)
-      var cap = $('capTok'); if (cap) cap.textContent = fmt(v)
-      if (p < 1) requestAnimationFrame(step); else { tok.cur = to; tok.anim = false }
+    if (tok.started) return
+    tok.started = true
+    function step() {
+      var diff = tok.target - tok.cur
+      if (Math.abs(diff) < Math.max(10, Math.abs(tok.target) * 0.001)) tok.cur = tok.target
+      else tok.cur += diff * 0.06
+      var v = fmt(tok.cur)
+      var el = $('tokTotal'); if (el && el.textContent !== v) el.textContent = v
+      var cap = $('capTok'); if (cap && cap.textContent !== v) cap.textContent = v
+      requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
   }
+  tickTokens()
 
   function pushEvent(ev) {
     var row = document.createElement('div')
     row.className = 'ev'
     row.innerHTML = '<b>' + (ev.ts || '').slice(11, 19) + '</b> ' + ev.type + (ev.stage ? ' · ' + ev.stage : '') + (ev.badges ? ' · ' + ev.badges : '')
     $('evList').insertBefore(row, $('evList').firstChild)
+    while ($('evList').children.length > 60) $('evList').lastChild.remove()
   }
 
   function showAdjNode(ev) {
@@ -428,7 +452,6 @@
       STATE.dispatches = d.dispatches || []
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
-      tickTokens()
       renderChips()
       // 聚焦任务在画布数据到达后才确定：首个轮询周期的环节事件可能已按上面规则跳过，
       // 由 flow 回填兜底（done/started 均已持久化在 RUN_STATE）。
@@ -437,13 +460,15 @@
       if (STATE.view === 'flow' && fid) {
         api('/company-api/flow?taskId=' + encodeURIComponent(fid)).then(function (f) {
           if (f.legacy) { STATE.flow = null; renderNodes(null); return }
+          var fsig = fid + '|' + JSON.stringify([f.done, f.started, f.current])
           STATE.flow = f
           STATE.done = f.done || {}
           STATE.started = new Set(f.started || [])
           STATE.ready = new Set(f.ready || [])
           STATE.current = f.current || null
           if (STATE.workingStage && STATE.started.has(STATE.workingStage) === false) STATE.workingStage = null
-          renderNodes(f)
+          // 流程快照无变化则不重绘（消除每 2s 轮询重建导致的闪动）
+          if (fsig !== STATE.flowSig) { STATE.flowSig = fsig; renderNodes(f) }
         }).catch(function () {})
       } else {
         renderOrg()
@@ -451,7 +476,7 @@
     }).catch(function () {})
   }
 
-  window.__selectTask = function (id) { STATE.focusTask = id; renderChips(); poll() }
+  window.__selectTask = function (id) { STATE.focusTask = id; STATE.orgSig = ''; STATE.flowSig = ''; renderChips(); poll() }
 
   window.resetLayout = function () { renderCurrent() }
 

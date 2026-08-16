@@ -55,6 +55,7 @@
   let detail = null
   let confirmAction = null
   let canvasOpen = true
+  let refreshSig = ''
 
   const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
   pill.addEventListener('click', function () { open = true; render() })
@@ -196,10 +197,12 @@
     return await r.json()
   }
   async function refreshAll() {
-    try { const d = await getJSON('/company-api/dashboard'); tasks = d.tasks || [] } catch (e) { tasks = [] }
-    try { tokenData = await getJSON('/company-api/tokens') } catch (e) { tokenData = null }
-    try { const a = await getJSON('/company-api/agents'); agentEntries = (a.entries || []).slice().reverse(); agentTotal = a.total || agentEntries.length } catch (e) { agentEntries = []; agentTotal = 0 }
-    render()
+    let sig = ''
+    try { const d = await getJSON('/company-api/dashboard'); tasks = d.tasks || []; sig += 'T' + JSON.stringify(tasks) } catch (e) { tasks = []; sig += 'T[]' }
+    try { tokenData = await getJSON('/company-api/tokens'); sig += 'K' + (tokenData && tokenData.rows ? tokenData.rows.length : 0) } catch (e) { tokenData = null; sig += 'K0' }
+    try { const a = await getJSON('/company-api/agents'); agentEntries = (a.entries || []).slice().reverse(); agentTotal = a.total || agentEntries.length; sig += 'A' + agentTotal + ':' + agentEntries.length } catch (e) { agentEntries = []; agentTotal = 0; sig += 'A0' }
+    // 数据无变化不重绘（消除 4s 轮询整块重建造成的闪动）
+    if (sig !== refreshSig) { refreshSig = sig; render() }
   }
   async function act(taskId, action) {
     try { await getJSON('/company-api/action?taskId=' + encodeURIComponent(taskId) + '&action=' + encodeURIComponent(action)) } catch (e) {}
