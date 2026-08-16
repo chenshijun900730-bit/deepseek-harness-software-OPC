@@ -27,8 +27,8 @@
       rows.push(ready); ready.forEach(function (n) { placed.add(n.id) })
     }
     rows.forEach(function (row, i) {
-      var x = 40 + i * 190
-      var y0 = 150 - ((row.length - 1) * 100) / 2
+      var x = 30 + i * 160
+      var y0 = 150 - ((row.length - 1) * 50)
       row.forEach(function (n, j) { pos[n.id] = { x: x, y: y0 + j * 100 } })
     })
     return pos
@@ -37,6 +37,7 @@
   function renderNodes(flow) {
     if (!cv) return
     cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
+    var ph = $('nd-placeholder'); if (ph) ph.remove()
     if (!flow) return
     var nodes = flow.nodes.filter(function (n) { return !n.skipped })
     var pos = layout(nodes)
@@ -80,6 +81,10 @@
   window.hideTip = function () { var t = $('tip'); if (t) t.style.display = 'none' }
 
   function openDept(node) {
+    if (typeof node === 'string') {
+      if (node === 'coord') { window.__openCoord(); return }
+      node = { dept: node, title: node }
+    }
     var d = STATE.depts[node.dept] || {}
     fillPanel('<div style="font-weight:700;color:#7dd3fc;padding:6px 10px;">部门抽屉：' + (node.title || node.id) + '</div>' +
       '<div class="drawer"><div class="k">模型</div>' + (d.model || '?') + ' · ' + (d.reasoning || '?') +
@@ -261,6 +266,15 @@
   }
 
   window.__selectTask = function (id) { STATE.focusTask = id; poll() }
+
+  window.__openCoord = function () {
+    fillPanel('<div style="font-weight:700;color:#fbbf24;padding:6px 10px;">🎯 总控 Coordinator（总监）</div>' +
+      '<div class="drawer">' +
+      '<div class="k">职责</div>派工 · 监督 · 分类/冲突裁决（裁决瞬间升 max，不常驻）' +
+      '<div class="k" style="margin-top:6px;">全公司</div>项目 ' + (STATE.tasks ? STATE.tasks.length : 0) + ' 个 · token 总量 ' + fmt(tok.target) + ' · 并发上限 ' + (STATE.concurrency || 3) +
+      '<div class="k" style="margin-top:6px;">操作</div>点顶栏滑杆调整并发；点 🔔 审批；点 ⚖ 决策；点「＋ 招聘部门」招聘' +
+      '</div><div class="btn" style="margin:8px 10px;" onclick="window.__closePanel()">✕ 关闭</div>')
+  }
 
   window.openHire = function () {
     fillPanel('<div style="font-weight:700;color:#fbbf24;padding:6px 10px;">＋ 招聘部门（三步）</div><div class="drawer">' +

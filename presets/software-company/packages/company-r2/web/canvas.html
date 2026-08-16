@@ -88,19 +88,8 @@
         </defs>
       </svg>
 
-      <div class="nd" id="nd-coord" style="left:430px;top:14px;width:200px;border-color:#f59e0b;background:#1a1408;color:#fbbf24;" onclick="openDept('coord')" onmouseenter="showTip(event,'coord',430,74)" onmouseleave="hideTip()">🎯 总控 Coordinator（总监）<small>常驻 · 派工 / 监督 / 裁决</small></div>
-      <div class="nd" id="nd-planner" style="left:40px;top:154px;width:130px;border-color:#22c55e;background:#0a1f12;color:#86efac;" onclick="openDept('planner')" onmouseenter="showTip(event,'planner',40,220)" onmouseleave="hideTip()">✅ 产品 Planner<small>蓝图已交付</small></div>
-      <div class="nd" id="nd-arch" style="left:230px;top:154px;width:130px;border-color:#22c55e;background:#0a1f12;color:#86efac;" onclick="openDept('arch')" onmouseenter="showTip(event,'arch',230,220)" onmouseleave="hideTip()">✅ 架构 Architect<small>模块划分已交付</small></div>
-      <div class="nd" id="nd-fe" style="left:430px;top:54px;width:130px;border-color:#22c55e;background:#0a1f12;color:#86efac;" onclick="openDept('fe')" onmouseenter="showTip(event,'fe',430,120)" onmouseleave="hideTip()">✅ 前端部<small>页面完成 · 已交接</small></div>
-      <div class="nd work" id="nd-be" style="left:430px;top:154px;width:130px;border-color:#a78bfa;background:#150b2e;color:#c4b5fd;" onclick="openDept('be')" onmouseenter="showTip(event,'be',430,220)" onmouseleave="hideTip()">⚙ 后端部<small>工作中 · 62% · ⚡ <b id="beTok" style="color:#f59e0b;">341.0k</b></small></div>
-      <div class="nd" id="nd-data" style="left:430px;top:254px;width:130px;border-color:#3b82f6;background:#0a1626;color:#93c5fd;" onclick="openDept('data')" onmouseenter="showTip(event,'data',430,320)" onmouseleave="hideTip()">⏸ 数据部<small>排队等并发名额</small></div>
-      <div class="nd" id="nd-inte" style="left:620px;top:154px;width:130px;border-color:#3b82f6;background:#0a1626;color:#93c5fd;" onclick="openDept('inte')" onmouseenter="showTip(event,'inte',620,220)" onmouseleave="hideTip()">⏳ 集成 Integrator<small>等待 3 路交接</small></div>
-      <div class="nd" id="nd-qa" style="left:810px;top:154px;width:130px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('qa')" onmouseenter="showTip(event,'qa',810,220)" onmouseleave="hideTip()">💤 QA 执行<small>空闲</small></div>
-      <div class="nd" id="nd-final" style="left:1000px;top:154px;width:130px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('final')" onmouseenter="showTip(event,'final',1000,220)" onmouseleave="hideTip()">💤 验收负责人<small>空闲 · 仅复杂/高风险</small></div>
-      <div class="nd" id="nd-rel" style="left:1190px;top:154px;width:130px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('rel')" onmouseenter="showTip(event,'rel',1190,220)" onmouseleave="hideTip()">🏁 发布<small>未开始</small></div>
-      <div class="nd" id="nd-repair" style="left:620px;top:304px;width:130px;border-color:#7f1d1d;background:#180909;color:#fca5a5;" onclick="openDept('repair')" onmouseenter="showTip(event,'repair',620,370)" onmouseleave="hideTip()">🔧 修复部 Repair<small>待命 · FAIL 时硬触发</small></div>
-      <div class="nd" id="nd-rec" style="left:1000px;top:304px;width:120px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('rec')" onmouseenter="showTip(event,'rec',1000,370)" onmouseleave="hideTip()">📋 秘书 Recorder<small>代码化 · 自动记录</small></div>
-      <div class="nd adj" id="nd-adj" style="left:720px;top:250px;width:88px;height:52px;line-height:1.5;" onclick="openDecision()" onmouseenter="showTip(event,'adj',700,270)" onmouseleave="hideTip()">⚖ 裁决<br/>14:40</div>
+      <div class="nd" id="nd-coord" style="left:430px;top:14px;width:200px;border-color:#f59e0b;background:#1a1408;color:#fbbf24;" onclick="window.__openCoord()">🎯 总控 Coordinator（总监）<small>常驻 · 派工 / 监督 / 裁决</small></div>
+      <div id="nd-placeholder" style="position:absolute;left:230px;top:200px;color:#6b7280;font-size:12px;">← 顶部选择一个项目 chip，画布将实时绘制该项目的串并联流转图（拖动节点、悬停信息卡、📄 交接契约都在这里）</div>
 
       <div class="cv-tip" id="tip"></div>
     </div>
@@ -109,18 +98,10 @@
       <div id="rail-default">
         <h4>⑤ 实时事件流 <span style="color:#6b7280;font-weight:400;">（真实事件，2s 增量）</span></h4>
         <div id="evList">
-          <div class="ev"><b>14:40:12</b> ⚖ 裁决：并发名额冲突 → 数据部排队</div>
-          <div class="ev"><b>14:32:05</b> 集成部 启动（接收前端交接）</div>
-          <div class="ev"><b>14:31:58</b> ✅ 前端 Sprint 验收 PASS（4/4 确定性断言）</div>
-          <div class="ev"><b>14:30:21</b> 📄 交接发出：前端 → 集成《页面与 API 对接说明》</div>
-          <div class="ev"><b>14:27:10</b> 后端部 进度 62%</div>
-          <div class="ev"><b>14:20:44</b> ⏸ 数据部 排队等待并发名额</div>
-          <div class="ev"><b>13:58:02</b> 📄 交接发出：架构 → 前端/后端/数据《接口契约 v2》</div>
+          <div class="ev" style="color:#4b5563;">等待事件流（每 2s 拉取真实事件）…</div>
         </div>
-        <h4>④ 交接契约（点击展开）</h4>
-        <div class="doc-row" onclick="openDoc('doc1')">📄 架构 → 3 部门《模块划分与接口契约 v2》<span class="ok">3/3 已签收</span></div>
-        <div class="doc-row" onclick="openDoc('doc2')">📄 前端 → 集成《页面与 API 对接说明》<span class="ok">已签收</span></div>
-        <div class="doc-row" onclick="openDoc('doc3')">📄 数据 → 集成《数据模型说明》<span class="queue">待生成</span></div>
+        <h4>④ 交接契约</h4>
+        <div class="doc-row" style="color:#4b5563;cursor:default;">交接契约显示在画布连线上的 📄 图标，点击查看全文</div>
       </div>
       <div id="rail-drawer" style="display:none;"></div>
     </div>
