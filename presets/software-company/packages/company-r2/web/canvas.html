@@ -75,16 +75,21 @@
     <span class="cap-note">← DSH 界面右上角浮动胶囊 · 点击进入下方全屏画布页 /company</span>
   </div>
 
-  <div class="bar">
-    <span style="font-weight:700;color:#f59e0b;">🏢 软件公司 · 总监控制台</span>
-    <span>⚡ 总量 <b style="color:#f59e0b;" id="tokTotal">1.24M</b> · ⇧ 表面 <b style="color:#7dd3fc;" id="tokSurface" title="上下文表面：随流式输出实时增长">-</b> · 近1分 <b style="color:#86efac;" id="tokDelta" title="最近 60 秒 token 增量">+0</b> · 今日 +86k ↑
-      <svg width="70" height="18" style="vertical-align:middle;"><polyline points="2,15 14,12 26,13 38,8 50,9 62,4" fill="none" stroke="#f59e0b" stroke-width="1.5"/></svg></span>
-    <span class="sld">并发上限 <span id="sld2" onclick="setConcurrency(2)">2</span><span id="sld3" class="on" onclick="setConcurrency(3)">3</span><span id="sld4" onclick="setConcurrency(4)">4</span> <span style="color:#6b7280;">(复杂任务默认 2)</span></span>
-    <span id="chips" style="display:contents;"></span>
-    <span id="scopeChips" style="display:contents;"></span>
-    <span class="sld">视图 <span id="vOrg" class="on" onclick="window.__setView('org')">🏢 组织</span><span id="vFlow" onclick="window.__setView('flow')">🔀 流程</span></span>
-    <span class="btn amber" onclick="window.openHire()">＋ 招聘部门</span>
-    <span class="btn" id="bell" onclick="openApprove()">🔔 1 待批准</span>
+  <div class="bar" style="flex-direction:column;align-items:stretch;gap:0;">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:#f59e0b;">🏢 软件公司 · 总监控制台</span>
+      <span>⚡ 总量 <b style="color:#f59e0b;" id="tokTotal">1.24M</b> · ⇧ 表面 <b style="color:#7dd3fc;" id="tokSurface" title="上下文表面：随流式输出实时增长">-</b> · 近1分 <b style="color:#86efac;" id="tokDelta" title="最近 60 秒 token 增量">+0</b> · 今日 +86k ↑
+        <svg width="70" height="18" style="vertical-align:middle;"><polyline points="2,15 14,12 26,13 38,8 50,9 62,4" fill="none" stroke="#f59e0b" stroke-width="1.5"/></svg></span>
+      <span class="sld">并发上限 <span id="sld2" onclick="setConcurrency(2)">2</span><span id="sld3" class="on" onclick="setConcurrency(3)">3</span><span id="sld4" onclick="setConcurrency(4)">4</span> <span style="color:#6b7280;">(复杂任务默认 2)</span></span>
+      <span class="sld">视图 <span id="vOrg" class="on" onclick="window.__setView('org')">🏢 组织</span><span id="vFlow" onclick="window.__setView('flow')">🔀 流程</span></span>
+      <span class="btn amber" onclick="window.openHire()">＋ 招聘部门</span>
+      <span class="btn" id="bell" onclick="openApprove()">🔔 1 待批准</span>
+    </div>
+    <!-- 任务行固定高度：任务/会话增减不换行、不改高度 → 画布不闪动不跳动 -->
+    <div id="chipRow" style="display:flex;align-items:center;gap:8px;min-height:26px;max-height:26px;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;margin-top:6px;scrollbar-width:thin;">
+      <span id="chips" style="display:contents;"></span>
+      <span id="scopeChips" style="display:contents;"></span>
+    </div>
   </div>
 
   <div id="engineBanner" style="display:none;margin:10px 16px 0;padding:12px 16px;background:#2b1b10;border:1px solid #b45309;border-radius:10px;font-size:12px;color:#fdba74;line-height:1.7;">
