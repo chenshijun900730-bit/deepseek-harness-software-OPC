@@ -461,6 +461,71 @@
       cv.appendChild(ic)
     })
   }
+  // ================= 变化浮层：数字/内容变化时浮现一张淡出上浮的小卡片 =================
+  var prevDeptTokens = {}
+  var lastDispatchAt = ''
+  function spawnChip(html, x, y) {
+    if (!cv) return
+    var chip = document.createElement('div')
+    chip.className = 'wchip'
+    chip.innerHTML = html
+    chip.style.left = Math.round(x) + 'px'
+    chip.style.top = Math.round(y) + 'px'
+    chip.style.opacity = '1'
+    cv.appendChild(chip)
+    // 下一帧触发 CSS transition：渐隐 + 上浮 46px，2.3s 后移除
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        chip.style.opacity = '0'
+        chip.style.top = (Math.round(y) - 46) + 'px'
+      })
+    })
+    setTimeout(function () { if (chip.parentNode) chip.parentNode.removeChild(chip) }, 2300)
+  }
+  function deptNodeOf(dept) { return $('nd-dept-' + dept) }
+  // Token 增长：部门累计用量跨过阈值时浮现「⚡+Δ」
+  function spawnTokenChips() {
+    if (STATE.view !== 'org') return
+    Object.keys(STATE.depts || {}).forEach(function (k) {
+      var total = STATE.depts[k].totalTokens || 0
+      var prev = prevDeptTokens[k]
+      if (prev !== undefined && total > prev) {
+        var delta = total - prev
+        if (delta >= Math.max(500, prev * 0.005)) {
+          var el = deptNodeOf(k)
+          if (el) spawnChip('<b>⚡ +' + fmt(delta) + '</b> ' + (STATE.depts[k].title || k), el.offsetLeft + 8, el.offsetTop - 6)
+        }
+      }
+      prevDeptTokens[k] = total
+    })
+  }
+  // 新调用：每次新的部门调用浮现「📞 新调用」
+  function spawnNewCallChips(dispatches) {
+    if (STATE.view !== 'org') return
+    var list = dispatches || []
+    var ats = list.map(function (d) { return String(d.at || '') }).filter(Boolean)
+    var maxAt = ats.length ? ats[ats.length - 1] : ''
+    if (lastDispatchAt && maxAt && maxAt > lastDispatchAt) {
+      list.forEach(function (d) {
+        if (String(d.at || '') <= lastDispatchAt) return
+        var el = deptNodeOf(d.dept)
+        if (!el) return
+        var task = d.taskId ? d.taskId.replace('TASK-', 'T').replace(/-\d{8}-/, '-') : '?'
+        var model = d.model ? d.model.replace('deepseek-v4-', '') : '?'
+        spawnChip('📞 新调用 <b>' + String(d.at || '').slice(11, 16) + '</b> ' + task + ' · ' + model + ' · ⚡' + fmt(d.tokens || 0), el.offsetLeft + 8, el.offsetTop - 6)
+      })
+    }
+    lastDispatchAt = maxAt
+  }
+  // 环节完成：部门节点上浮现「✅ 环节完成」
+  function spawnStageChip(stage) {
+    if (STATE.view !== 'org') return
+    var dept
+    ;(STATE.flowNodes || []).forEach(function (n) { if (n.id === stage) dept = n.dept })
+    var el = deptNodeOf(dept)
+    if (!el) return
+    spawnChip('<b>✅ 环节完成</b> ' + stage, el.offsetLeft + 8, el.offsetTop - 6)
+  }
   function fmtDur(ms) {
     if (!ms || ms <= 0) return ''
     if (ms < 60000) return Math.round(ms / 1000) + 's'
@@ -660,7 +725,7 @@
         // 切换任务时 flow 接口会回填该任务的权威 done/started，跳过的实时事件不丢状态。
         if (ev.taskId && ev.taskId !== STATE.focusTask) return
         if (ev.type === 'stage.started') { STATE.workingStage = ev.stage; STATE.started.add(ev.stage); renderCurrent() }
-        if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; STATE.started.delete(ev.stage); renderCurrent() }
+        if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; STATE.started.delete(ev.stage); spawnStageChip(ev.stage); renderCurrent() }
         if (ev.type === 'adjudication.started') showAdjNode(ev)
         if (ev.type === 'adjudication.decided') { var a = $('nd-adj'); if (a) a.remove() }
       })
@@ -671,6 +736,8 @@
       STATE.dispatchDepts = d.dispatchDepts || {}
       STATE.roles = d.roles || []
       STATE.dispatches = d.dispatches || []
+      // 变化浮层：Token 增长与新调用各浮现一张淡出卡片
+      if (STATE.view === 'org') { spawnTokenChips(); spawnNewCallChips(d.dispatches || []) }
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
       renderChips()
