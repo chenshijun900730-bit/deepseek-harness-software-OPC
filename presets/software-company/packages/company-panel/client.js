@@ -132,8 +132,11 @@
       if (w) w.focus()
     } catch (e) {}
   })
+  let pipBtn = null
+  let pipSupported = false
   if (window.documentPictureInPicture && window.documentPictureInPicture.requestWindow) {
-    const pipBtn = el('button', btnStyle('#f59e0b'), '\uD83D\uDCCC \u60AC\u6D6E\u7F6E\u9876')
+    pipSupported = true
+    pipBtn = el('button', btnStyle('#f59e0b'), '\uD83D\uDCCC \u60AC\u6D6E\u7F6E\u9876')
     pipBtn.title = '弹出为置顶悬浮窗（OS 窗口：可拖到任意屏幕，始终悬于其他应用之上）'
     pipBtn.addEventListener('click', function () {
       window.documentPictureInPicture.requestWindow({ width: 1520, height: 880 }).then(function (pip) {
@@ -142,6 +145,47 @@
     })
     headerBtns.appendChild(pipBtn)
   }
+  // ================= 窗口按钮可选（⚙ 设置，localStorage 记住） =================
+  let winPrefs = { popout: true, pip: true }
+  try {
+    const savedW = JSON.parse(localStorage.getItem('companyPanelWindows') || '{}')
+    if (savedW && typeof savedW === 'object') winPrefs = Object.assign(winPrefs, savedW)
+  } catch (e) {}
+  function saveWinPrefs() { try { localStorage.setItem('companyPanelWindows', JSON.stringify(winPrefs)) } catch (e) {} }
+  function applyWinPrefs() {
+    if (popoutBtn) popoutBtn.style.display = winPrefs.popout ? '' : 'none'
+    if (pipBtn) pipBtn.style.display = winPrefs.pip ? '' : 'none'
+  }
+  const gearBtn = el('button', btnStyle('#94a3b8'), '\u2699')
+  gearBtn.title = '窗口按钮显示设置（可选显示/隐藏）'
+  const gearMenu = el('div', { display: 'none', position: 'absolute', top: '34px', right: '0px', background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', zIndex: '20', boxShadow: '0 8px 24px rgba(0,0,0,.5)', color: '#e5e7eb' })
+  function renderGearMenu() {
+    gearMenu.innerHTML = ''
+    const items = [['popout', '⧉ 独立窗口按钮']]
+    if (pipSupported) items.push(['pip', '📌 悬浮置顶按钮'])
+    items.forEach(function (it) {
+      const label = el('label', { display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', cursor: 'pointer' })
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.checked = !!winPrefs[it[0]]
+      cb.addEventListener('change', function () { winPrefs[it[0]] = cb.checked; saveWinPrefs(); applyWinPrefs() })
+      label.appendChild(cb)
+      label.appendChild(document.createTextNode(it[1]))
+      gearMenu.appendChild(label)
+    })
+  }
+  gearBtn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    renderGearMenu()
+    gearMenu.style.display = gearMenu.style.display === 'none' ? 'block' : 'none'
+  })
+  document.addEventListener('pointerdown', function (e) {
+    if (gearMenu.style.display === 'block' && !gearMenu.contains(e.target)) gearMenu.style.display = 'none'
+  })
+  headerBtns.style.position = 'relative'
+  headerBtns.appendChild(gearBtn)
+  headerBtns.appendChild(gearMenu)
+  applyWinPrefs()
   headerBtns.appendChild(scopeSel); headerBtns.appendChild(popoutBtn); headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
   header.appendChild(title); header.appendChild(headerBtns)
 
