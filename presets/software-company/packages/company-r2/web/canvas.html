@@ -61,6 +61,9 @@
   .call:hover { border-color:#7dd3fc; background:#12304a; }
   .call b { color:#7dd3fc; font-weight:600; }
   .call span { color:#94a3b8; font-size:9px; }
+  .next-edge.step1 { animation: nextPulse 1.4s infinite; }
+  .next-edge.step2 { animation: nextPulse 2.2s infinite; }
+  @keyframes nextPulse { 0%,100% { stroke-opacity: 1; } 50% { stroke-opacity: .3; } }
 </style>
 
 <div id="canvasScroll" style="overflow-x:auto;overflow-y:auto;">
@@ -116,6 +119,7 @@
     <span><span style="color:#3b82f6;">▤</span> 调用卡：每调用一次该部门就叠加一张（时间 · 任务 · 模型 · token）</span>
     <span><span style="color:#22c55e;">■</span> 环节全部完结（绿色）</span>
     <span><span style="color:#a78bfa;">■</span> 工作中（流光+呼吸）</span>
+    <span style="color:#fb923c;font-weight:700;">──</span> 下一步交接（橙实线·流光）<span style="color:#fbbf24;font-weight:700;">- -</span> 第二步交接（橙虚线）
     <span>📄 部门间交接文件（点击看全文）</span>
     <span style="color:#f59e0b;">- - 总监虚线=派工/监督 · ⚖=瞬时裁决节点</span>
     <button class="btn" onclick="resetLayout()">⟲ 复位</button>

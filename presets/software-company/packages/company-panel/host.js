@@ -354,6 +354,42 @@ export default {
     // ================= Web API（面板数据源） =================
     // v2：/company-api 路由统一由 company-r2 注册（含 canvas/events/flow/contract 等新路由）。
     // company-panel 不再注册，避免「先到先得」抢注旧路由集导致新路由 404。
-    // （保留本注释段作为历史说明；下方原注册块已移除。）
+    // v3：/company 画布页 + /company/static 静态文件改由本宿主平面插件注册——
+    // 开机即注册、永久生效；预置 company-r2 会话挂载/卸载不再影响画布页面可用性
+    // （company-r2 侧同名注册会因 duplicate 抛错并被其 try/catch 吞掉，无副作用）。
+    const webServer = ctx.get('webServer')
+    if (webServer !== undefined) {
+      const webDir = new URL('../company-r2/web/', import.meta.url).pathname
+      async function readWebFile(name) {
+        if (!/^[a-zA-Z0-9_.-]+$/.test(name)) return undefined
+        return await readTextAt(webDir + name)
+      }
+      try {
+        ctx.effect(() => webServer.register({
+          kind: 'exact',
+          path: '/company',
+          handler: async function (req, res) {
+            const html = await readWebFile('canvas.html')
+            if (html === undefined) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('canvas.html missing'); return }
+            res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' })
+            res.end(html)
+          },
+        }))
+      } catch (e) { /* 已被注册则复用 */ }
+      try {
+        ctx.effect(() => webServer.register({
+          kind: 'prefix',
+          path: '/company/static',
+          handler: async function (req, res) {
+            const p = new URL(req.url || '/', 'http://x').pathname.replace('/company/static/', '')
+            const text = await readWebFile(p)
+            if (text === undefined) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return }
+            const type = p.endsWith('.js') ? 'text/javascript; charset=utf-8' : (p.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/plain; charset=utf-8')
+            res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' })
+            res.end(text)
+          },
+        }))
+      } catch (e) { /* 已被注册则复用 */ }
+    }
   },
 }

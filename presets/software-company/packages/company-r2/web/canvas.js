@@ -265,6 +265,28 @@
       flowDepts[n.dept] = (flowDepts[n.dept] || 0) + 1
       if (STATE.done[n.id]) doneDepts[n.dept] = (doneDepts[n.dept] || 0) + 1
     })
+    // 接下来两步的交接：step1=目标环节已就绪（依赖全部完结）；step2=目标环节的
+    // 依赖 ⊆ 已完结 ∪ 就绪（下一步完成后即交接）
+    var doneSet = new Set(Object.keys(STATE.done || {}))
+    var readySet = new Set()
+    ;(STATE.flowNodes || []).forEach(function (n) {
+      if (doneSet.has(n.id)) return
+      var allDone = (n.needs || []).every(function (x) { return doneSet.has(x) || !(STATE.flowNodes || []).some(function (m) { return m.id === x }) })
+      if (allDone) readySet.add(n.id)
+    })
+    var nextHandoffs = []
+    ;(STATE.flowNodes || []).forEach(function (n) {
+      if (doneSet.has(n.id)) return
+      var needs = n.needs || []
+      if (!needs.length) return
+      var allDone = needs.every(function (x) { return doneSet.has(x) })
+      if (allDone) {
+        needs.forEach(function (m) { nextHandoffs.push({ from: m, to: n.id, step: 1 }) })
+      } else if (needs.every(function (x) { return doneSet.has(x) || readySet.has(x) })) {
+        needs.forEach(function (m) { if (doneSet.has(m) || readySet.has(m)) nextHandoffs.push({ from: m, to: n.id, step: 2 }) })
+      }
+    })
+    STATE.nextHandoffs = nextHandoffs
     var nodes = ORG.filter(function (o) { return true })
     nodes.forEach(function (o) {
       var r = roleOf(o.id)
@@ -291,8 +313,43 @@
       cv.appendChild(el)
     })
     renderOrgEdges()
+    renderNextEdges()
     renderCallCards()
     renderContractIcons()
+  }
+  // 下两步交接的特殊连线：橙实线（下一步，流光）/ 橙虚线（第二步），画在部门节点之间
+  function renderNextEdges() {
+    var svg = $('edges')
+    if (!svg) return
+    svg.querySelectorAll('.next-edge').forEach(function (el) { el.remove() })
+    var deptOf = {}
+    ;(STATE.flowNodes || []).forEach(function (n) { deptOf[n.id] = n.dept })
+    var pairs = {}
+    ;(STATE.nextHandoffs || []).forEach(function (h) {
+      var a = deptOf[h.from], b = deptOf[h.to]
+      if (!a || !b || a === b) return
+      var key = a + '|' + b
+      if (pairs[key] === undefined || h.step < pairs[key]) pairs[key] = h.step
+    })
+    Object.keys(pairs).forEach(function (key) {
+      var parts = key.split('|')
+      var na = $('nd-dept-' + parts[0]), nb = $('nd-dept-' + parts[1])
+      if (!na || !nb) return
+      var step = pairs[key]
+      var x1 = na.offsetLeft + na.offsetWidth / 2, y1 = na.offsetTop + na.offsetHeight / 2
+      var x2 = nb.offsetLeft + nb.offsetWidth / 2, y2 = nb.offsetTop + nb.offsetHeight / 2
+      var p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      p.setAttribute('class', 'next-edge step' + step)
+      p.setAttribute('d', 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + ((y1 + y2) / 2) + ' ' + x2 + ',' + ((y1 + y2) / 2) + ' ' + x2 + ',' + y2)
+      p.setAttribute('stroke', step === 1 ? '#fb923c' : '#fbbf24')
+      p.setAttribute('stroke-width', step === 1 ? '3' : '2.5')
+      p.setAttribute('fill', 'none')
+      if (step === 2) p.setAttribute('stroke-dasharray', '7 5')
+      var title = document.createElementNS('http://www.w3.org/2000/svg', 'title')
+      title.textContent = (step === 1 ? '下一步交接' : '第二步交接') + '：' + parts[0] + ' → ' + parts[1]
+      p.appendChild(title)
+      svg.appendChild(p)
+    })
   }
   function renderOrgEdges() {
     var svg = $('edges')
