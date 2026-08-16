@@ -3,6 +3,9 @@
   'use strict'
   function installPanel() {
   if (window.__COMPANY_PANEL_INSTALLED__) return
+  // DOM 级防重兜底：不同 client bundle 沙箱可能互不可见 window 标志，
+  // 但共享同一个 document —— 已装过则不再装（避免双 pill 重叠）
+  if (document.getElementById('company-panel-root')) return
   window.__COMPANY_PANEL_INSTALLED__ = true
 
   const STAGES = ['INTAKE', 'CLASSIFIED', 'DISCOVERY', 'PRODUCT_PLANNED', 'WAITING_INITIAL_APPROVAL', 'SPRINT_DRAFTING', 'CONTRACT_REVIEW', 'CONTRACT_SIGNED', 'IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'SPRINT_PASSED', 'REPAIRING', 'REPLANNING', 'FINAL_E2E', 'RELEASED']
@@ -39,6 +42,7 @@
 
   // ---------- 面板骨架 ----------
   const root = el('div', { position: 'fixed', top: '12px', right: '12px', zIndex: '100000', pointerEvents: 'auto', fontFamily: FONT, fontSize: '13px', color: '#e5e7eb' })
+  root.id = 'company-panel-root'
   document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(root) })
   if (document.body) document.body.appendChild(root)
 
@@ -50,13 +54,10 @@
   let agentTotal = 0
   let detail = null
   let confirmAction = null
+  let canvasOpen = false
 
   const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
   pill.addEventListener('click', function () { open = true; render() })
-
-  const canvasLink = el('a', { pointerEvents: 'auto', cursor: 'pointer', background: '#f59e0b', color: '#0b0f19', border: '1px solid #f59e0b', borderRadius: '22px', padding: '10px 14px', fontSize: '13px', fontWeight: '700', textDecoration: 'none', boxShadow: '0 4px 16px rgba(0,0,0,.35)' }, '\u{1F5FA} 总监大画布')
-  canvasLink.setAttribute('href', '/company')
-  canvasLink.setAttribute('target', '_blank')
 
   const panelSize = { w: 640, h: null }
   const panel = el('div', { width: panelSize.w + 'px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#111827', border: '1px solid #374151', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)', overflow: 'hidden', position: 'relative' })
@@ -70,11 +71,39 @@
   }
   headerBtns.appendChild(presetW('窄', 380)); headerBtns.appendChild(presetW('中', 520)); headerBtns.appendChild(presetW('宽', 700))
   const refreshBtn = el('button', btnStyle('#94a3b8'), '\u21BB')
+  const canvasBtn = el('button', btnStyle(canvasOpen ? '#f59e0b' : '#94a3b8'), '\u{1F5FA} \u753B\u5E03')
+  canvasBtn.addEventListener('click', function () {
+    canvasOpen = !canvasOpen
+    if (canvasOpen && panelSize.w < 700) { panelSize.w = 700; applySize() }
+    render()
+  })
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
   closeBtn.addEventListener('click', function () { open = false; render() })
-  headerBtns.appendChild(refreshBtn); headerBtns.appendChild(closeBtn)
+  headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
   header.appendChild(title); header.appendChild(headerBtns)
+
+  // 画布区（任务选项卡上方）：iframe 复用 /company 页；收起时卸载停轮询，展开时重新挂载
+  const canvasWrap = el('div', { display: 'none', flex: 'none', borderBottom: '1px solid #1f2937', background: '#0b0f19' })
+  const canvasBar = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', fontSize: '11px', color: '#9ca3af', background: '#111827' }, [
+    el('span', null, '\u{1F5FA} 总监大画布 · 实时（拖动节点 / 悬停信息卡 / 画布上审批决策）'),
+    el('span', { cursor: 'pointer', color: '#f59e0b', fontWeight: '600' }, '\u6536\u8D77 \u25B2'),
+  ])
+  canvasBar.children[1].addEventListener('click', function () { canvasOpen = false; render() })
+  const canvasFrame = document.createElement('iframe')
+  canvasFrame.setAttribute('title', '总监大画布')
+  canvasFrame.style.cssText = 'width:100%;height:620px;border:0;display:block;background:#0b0f19'
+  canvasWrap.appendChild(canvasBar)
+  canvasWrap.appendChild(canvasFrame)
+  function mountCanvas(mount) {
+    if (mount) {
+      canvasWrap.style.display = 'block'
+      if (canvasFrame.getAttribute('src') !== '/company') canvasFrame.setAttribute('src', '/company')
+    } else {
+      canvasWrap.style.display = 'none'
+      if (canvasFrame.getAttribute('src') === '/company') canvasFrame.removeAttribute('src')
+    }
+  }
 
   const tabs = el('div', { display: 'flex', gap: '4px', padding: '8px 10px 0' })
   const body = el('div', { padding: '10px', overflowY: 'auto', overflowX: 'hidden', flex: '1', minHeight: '60px' })
@@ -144,13 +173,7 @@
   // ---------- 渲染 ----------
   function render() {
     root.innerHTML = ''
-    if (!open) {
-      const wrap = el('div', { display: 'flex', gap: '8px', alignItems: 'center' })
-      wrap.appendChild(pill)
-      wrap.appendChild(canvasLink)
-      root.appendChild(wrap)
-      return
-    }
+    if (!open) { root.appendChild(pill); return }
     tabs.innerHTML = ''
     tabs.appendChild(tabBtn('tasks', '\u{1F5D3} 任务'))
     tabs.appendChild(tabBtn('tokens', '\u26A1 Tokens'))
@@ -159,6 +182,11 @@
     if (tab === 'tasks') renderTasks()
     else if (tab === 'tokens') renderTokens()
     else renderAgents()
+    // 画布区固定在 header 之下、选项卡之上；收起时卸载 iframe 停掉 2s 轮询
+    if (canvasWrap.parentNode !== panel) panel.insertBefore(canvasWrap, tabs)
+    mountCanvas(canvasOpen)
+    canvasBtn.style.borderColor = canvasOpen ? '#f59e0b' : '#94a3b8'
+    canvasBtn.style.color = canvasOpen ? '#f59e0b' : '#94a3b8'
     root.appendChild(panel)
   }
 
