@@ -372,7 +372,10 @@
       var calls = deptCalls(o.id)
       var d = STATE.depts[o.id] || {}
       var allDone = flowDepts[o.id] && doneDepts[o.id] === flowDepts[o.id]
-      var st = o.id === 'coordinator' ? 'working' : (allDone ? 'done' : (calls.length ? 'working' : 'idle'))
+      // 状态色：活跃(紫) / 环节全完(绿) / 被调用过但当前未活跃(蓝·待命) / 从未调用(灰)。
+      // 以前「调用过但暂停」的部门会因焦点任务过滤而落灰；现在凡有历史调用即显示蓝色待命。
+      var everCalled = calls.length > 0 || (STATE.dispatches || []).some(function (dd) { return dd.dept === o.id })
+      var st = o.id === 'coordinator' ? 'working' : (allDone ? 'done' : (calls.length ? 'working' : (everCalled ? 'queued' : 'idle')))
       var s = STATUS_STYLE[st]
       var el = document.createElement('div')
       el.className = 'nd' + (st === 'working' ? ' work' : '')
@@ -381,7 +384,9 @@
       var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
       var surfs = ' · <span class="dsurf" title="上下文表面：随流式输出实时增长">⇧' + fmt(d.surfaceTokens || 0) + '</span>'
       var doneNote = allDone ? ' · ✅' : (doneDepts[o.id] ? ' · ✅' + doneDepts[o.id] + '/' + flowDepts[o.id] : '')
-      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + doneNote + toks + surfs + '</small>'
+      var totalCalls = calls.length || (STATE.dispatches || []).filter(function (dd) { return dd.dept === o.id }).length
+      var stateNote = (st === 'queued') ? ' · 待命 · 调用×' + totalCalls : (calls.length ? ' · 调用×' + calls.length : '')
+      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + stateNote + doneNote + toks + surfs + '</small>'
       el.addEventListener('click', function () { if (justMoved) return; openOrgDept(o.id) })
       el.addEventListener('pointerdown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
