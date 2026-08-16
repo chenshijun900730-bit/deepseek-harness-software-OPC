@@ -494,7 +494,7 @@
 
   render()
   refreshAll()
-  setInterval(function () { if (open) refreshAll() }, 4000)
+  setInterval(function () { if (open) refreshAll() }, 2000)
   }
 
   window.__ModuleLoader__.load({

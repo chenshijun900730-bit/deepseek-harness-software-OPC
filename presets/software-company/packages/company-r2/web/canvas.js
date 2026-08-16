@@ -1,9 +1,9 @@
-/* 总监大画布数据层：2s 增量拉取事件流 + 快照，前端线性补间渲染。零依赖。 */
+/* 总监大画布数据层：1s 增量拉取多项目合并事件流（ts 游标）+ 快照，前端线性补间渲染。零依赖。 */
 (function () {
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
+  var STATE = { view: 'org', tasks: [], events: [], since: '', seenKeys: new Set(), depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
@@ -794,13 +794,18 @@
       chip('📂 ' + (s.title || String(s.sessionId || '').slice(0, 8)) + ' · ' + s.taskCount, s.sessionId, s.sessionId !== null && STATE.scope === s.sessionId)
     })
   }
+  // 切换 scope 时重置事件游标（多项目合并流：ts 游标 + project#seq 去重集）
+  function resetEventCursor() {
+    STATE.since = ''
+    STATE.seenKeys = new Set()
+    var evl = $('evList'); if (evl) evl.innerHTML = ''
+  }
   window.__selectScope = function (id) {
     STATE.scope = id || null
     STATE.scopeChosen = true
     STATE.focusTask = null
     STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
-    STATE.seq = 0
-    $('evList').innerHTML = ''
+    resetEventCursor()
     renderChips(); renderScopeChips()
     poll()
   }
@@ -821,8 +826,7 @@
       STATE.scope = hit
       STATE.focusTask = null
       STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
-      STATE.seq = 0
-      var ev = $('evList'); if (ev) ev.innerHTML = ''
+      resetEventCursor()
       renderScopeChips()
       return true
     }
@@ -830,7 +834,7 @@
   }
 
   // ================= 面板（父窗口）即时 scope 切换 =================
-  // 面板侧栏自动跟随 / 手动选择都会 postMessage：画布立即切换，不等 2s 轮询；
+  // 面板侧栏自动跟随 / 手动选择都会 postMessage：画布立即切换，不等轮询；
   // auto=false（面板手动选择）保持锁定，auto=true（跟随侧栏）解除锁定。
   window.addEventListener('message', function (ev) {
     if (!ev || !ev.data || ev.data.type !== 'company-scope') return
@@ -842,16 +846,24 @@
     if (!ev.data.auto) lastParentTitle = detectParentSessionTitle()
     STATE.focusTask = null
     STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
-    STATE.seq = 0
-    var evl = $('evList'); if (evl) evl.innerHTML = ''
+    resetEventCursor()
     renderChips(); renderScopeChips()
     poll()
   })
 
   function poll() {
-    api('/company-api/events?seq=' + STATE.seq + scopeQuery()).then(function (d) {
+    api('/company-api/events?since=' + encodeURIComponent(STATE.since) + scopeQuery()).then(function (d) {
       (d.events || []).forEach(function (ev) {
-        STATE.seq = ev.seq
+        var key = ev._key || ((ev.project || '') + '#' + ev.seq)
+        if (STATE.seenKeys.has(key)) return
+        STATE.seenKeys.add(key)
+        if (STATE.seenKeys.size > 2000) {
+          // 修剪最早一半，防无限增长
+          var drop = Math.floor(STATE.seenKeys.size / 2)
+          var it = STATE.seenKeys.values()
+          for (var i = 0; i < drop; i++) STATE.seenKeys.delete(it.next().value)
+        }
+        if (!STATE.since || ev.ts > STATE.since) STATE.since = ev.ts
         pushEvent(ev)
         // 只把属于当前聚焦任务的环节事件应用到画布（多任务共存时防止串台）；
         // 切换任务时 flow 接口会回填该任务的权威 done/started，跳过的实时事件不丢状态。
@@ -965,7 +977,7 @@
       .catch(function (e) { $('hireMsg').textContent = '❌ ' + e.message })
   }
 
-  setInterval(poll, 2000)
+  setInterval(poll, 1000)
   poll()
 
   window.openDoc = function (taskId, from, to) {

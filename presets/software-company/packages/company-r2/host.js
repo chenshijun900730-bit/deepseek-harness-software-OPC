@@ -272,7 +272,7 @@ export default {
     let sessionsCache = { at: 0, rows: [] }
     async function sessionsSnapshot() {
       const nowMs = Date.now()
-      if (nowMs - sessionsCache.at < 10000) return sessionsCache.rows
+      if (nowMs - sessionsCache.at < 2000) return sessionsCache.rows
       const tasks = await listAllTasks()
       const sq = ctx.get('sessionQuery')
       // 会话头信息一次性取齐：listSessions 只读头（便宜）；标题走 cachedTitle，
@@ -975,7 +975,7 @@ export default {
             if (p === '/company-api/dashboard') out = { tasks: await scopedListAllTasks(q.get('scope')) }
             else if (p === '/company-api/task') out = await taskDetail(q.get('taskId'))
             else if (p === '/company-api/tokens') out = await tokensSnapshot()
-            else if (p === '/company-api/agents') out = { entries: agentLog.slice(-80), total: agentLog.length }
+            else if (p === '/company-api/agents') out = await agentsLogSnapshot()
             else if (p === '/company-api/events') out = await eventsSnapshot(q)
             else if (p === '/company-api/flow') out = await flowSnapshot(q)
             else if (p === '/company-api/contract') out = await contractSnapshot(q)
@@ -1084,19 +1084,63 @@ export default {
       return { ok: true }
     }
 
+    async function agentsLogSnapshot() {
+      // 多项目合并子代理日志：读全部项目的 agents-log.jsonl + 内存未落盘条目
+      const seen = new Set()
+      const rows = []
+      for (const p of await projectList()) {
+        let text = ''
+        try { text = (await readTextAt(p + '/.company-harness/agents-log.jsonl')) || '' } catch (e) {}
+        for (const line of text.split('\n')) {
+          if (!line.trim()) continue
+          try {
+            const rec = JSON.parse(line)
+            if (!rec || typeof rec.at !== 'string') continue
+            const key = p + '#' + rec.at + '#' + (rec.runId || '') + '#' + rec.kind
+            if (seen.has(key)) continue
+            seen.add(key)
+            rec.project = p
+            rows.push(rec)
+          } catch (e) {}
+        }
+      }
+      for (const rec of agentLog) {
+        const key = (rec.project || '') + '#' + String(rec.at || '') + '#' + String(rec.runId || '') + '#' + rec.kind
+        if (seen.has(key)) continue
+        seen.add(key)
+        rows.push(rec)
+      }
+      rows.sort(function (a, b) { return String(b.at || '') < String(a.at || '') ? -1 : 1 })
+      return { entries: rows.slice(0, 80).reverse(), total: rows.length }
+    }
     async function eventsSnapshot(q) {
-      const base = await defaultProjectDir()
-      const file = createEventsFile(base + '/.company-harness/events')
-      const afterSeq = Number(q.get('seq') || 0)
-      const raw = readSince(file, afterSeq)
-      const nextSeq = raw.length ? raw[raw.length - 1].seq : afterSeq
-      let events = raw
+      // 多项目合并事件流：按 ts 时间游标增量（since），客户端按 project#seq 去重。
+      // 两个公司模式（游戏/liunx/…）的事件合并推送，画布一次拉全。
+      const since = String(q.get('since') || '')
+      const projects = await projectList()
+      const out = []
+      for (const p of projects) {
+        let text = ''
+        try { text = (await readTextAt(p + '/.company-harness/events/events.jsonl')) || '' } catch (e) {}
+        for (const line of text.split('\n')) {
+          if (!line.trim()) continue
+          try {
+            const rec = JSON.parse(line)
+            if (!rec || typeof rec.ts !== 'string') continue
+            if (since && rec.ts < since) continue
+            rec.project = p
+            rec._key = p + '#' + rec.seq
+            out.push(rec)
+          } catch (e) { /* 半行忽略 */ }
+        }
+      }
+      out.sort(function (a, b) { return a.ts < b.ts ? -1 : (a.ts > b.ts ? 1 : 0) })
       const scope = q.get('scope')
       if (scope) {
         const ids = await scopedTaskIds(scope, await listAllTasks())
-        if (ids) events = raw.filter(function (ev) { return !ev.taskId || ids.has(ev.taskId) })
+        if (ids) out = out.filter(function (ev) { return !ev.taskId || ids.has(ev.taskId) })
       }
-      return { events, nextSeq }
+      return { events: out }
     }
 
     async function flowSnapshot(q) {
@@ -1217,26 +1261,33 @@ export default {
       }
     }
 
-    async function dispatchFile() {
-      const base = await defaultProjectDir()
-      return base + '/.company-harness/dispatches.jsonl'
+    async function dispatchFiles() {
+      const out = []
+      for (const p of await projectList()) out.push(p + '/.company-harness/dispatches.jsonl')
+      return out
     }
-    async function recordDispatch(d) { appendEvent(await dispatchFile(), d) }
-    // ================= 派工记录补全缓存（持久化） =================
-    // 补全需读子代理整会话日志（解压+重放校验）；每 2s 画布轮询时逐个读会打挂进程。
-    // 内存缓存 120s + 落盘 sidecar（跨重启）：每个派工记录最多读一次日志。
-    let dispatchEnrichMap = {}
-    async function loadDispatchEnrichMap() {
+    async function recordDispatch(d) { appendEvent((await defaultProjectDir()) + '/.company-harness/dispatches.jsonl', d) }
+    // ================= 派工记录补全缓存（按项目持久化） =================
+    // 补全需读子代理整会话日志（解压+重放校验）；每 1-2s 画布轮询时逐个读会打挂进程。
+    // 内存缓存 120s + 按项目落盘 sidecar（跨重启）：每个派工记录最多读一次日志。
+    let dispatchEnrichMaps = new Map() // project -> { sid: rec }
+    function dispatchEnrichFile(p) { return p + '/.company-harness/dispatch-enrich.json' }
+    async function loadDispatchEnrichMap(p) {
+      if (dispatchEnrichMaps.has(p)) return dispatchEnrichMaps.get(p)
+      let m = {}
       try {
-        const t = await readTextAt(await defaultProjectDir() + '/.company-harness/dispatch-enrich.json')
-        if (t) { const m = JSON.parse(t); if (m && typeof m === 'object') dispatchEnrichMap = m }
+        const t = nodeFs.readFileSync(dispatchEnrichFile(p), 'utf8')
+        const j = JSON.parse(t)
+        if (j && typeof j === 'object') m = j
       } catch (e) {}
+      dispatchEnrichMaps.set(p, m)
+      return m
     }
-    async function saveDispatchEnrich(sid, rec) {
-      dispatchEnrichMap[sid] = rec
-      try { nodeFs.writeFileSync(await defaultProjectDir() + '/.company-harness/dispatch-enrich.json', JSON.stringify(dispatchEnrichMap)) } catch (e) {}
+    async function saveDispatchEnrich(p, sid, rec) {
+      const m = await loadDispatchEnrichMap(p)
+      m[sid] = rec
+      try { nodeFs.writeFileSync(dispatchEnrichFile(p), JSON.stringify(m)) } catch (e) {}
     }
-    loadDispatchEnrichMap()
     // 派工记录补全：从子代理会话首条用户消息解析「…软件公司 Harness 中的 **角色**…（任务 TASK-…）」
     // 得到 department（角色 id）与 taskId。缓存 120s，避免 2s 轮询反复读会话日志。
     const dispatchEnrichCache = new Map()
@@ -1252,6 +1303,7 @@ export default {
     async function enrichDispatch(d) {
       if (!d || !d.sessionId) return d
       const sid = d.sessionId
+      const proj = d.project || (await defaultProjectDir())
       // 1) 内存缓存（120s）
       const cached = dispatchEnrichCache.get(sid)
       if (cached !== undefined && Date.now() - cached.at < 120000) {
@@ -1261,9 +1313,9 @@ export default {
         d.durationMs = cached.durationMs
         return d
       }
-      // 2) 落盘 sidecar（跨重启，读一次日志后永久复用）
-      const stored = dispatchEnrichMap[sid]
-      if (stored !== undefined && stored.dept !== undefined || stored !== undefined && stored.taskId !== undefined) {
+      // 2) 落盘 sidecar（按项目；跨重启，读一次日志后永久复用）
+      const stored = (await loadDispatchEnrichMap(proj))[sid]
+      if (stored !== undefined && (stored.dept !== undefined || stored.taskId !== undefined)) {
         dispatchEnrichCache.set(sid, { at: Date.now(), dept: stored.dept, taskId: stored.taskId, prompt: stored.prompt, durationMs: stored.durationMs })
         d.department = stored.dept
         d.taskId = stored.taskId
@@ -1332,7 +1384,7 @@ export default {
       const durationMs = (startTime !== undefined && endTime !== undefined) ? Math.max(0, endTime - startTime) : undefined
       const rec = { dept, taskId, prompt, durationMs }
       dispatchEnrichCache.set(sid, { at: Date.now(), dept, taskId, prompt, durationMs })
-      saveDispatchEnrich(sid, rec)
+      saveDispatchEnrich(proj, sid, rec)
       d.department = dept
       d.taskId = taskId
       d.prompt = prompt
@@ -1340,11 +1392,15 @@ export default {
       return d
     }
     async function listDispatchRecords() {
-      const text = await readTextAt(await dispatchFile())
-      if (!text) return []
-      const raw = text.split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l) } catch (e) { return null } }).filter(Boolean)
-      for (const d of raw) await enrichDispatch(d)
-      return raw
+      const out = []
+      for (const f of await dispatchFiles()) {
+        const text = await readTextAt(f)
+        if (!text) continue
+        const proj = f.replace('/.company-harness/dispatches.jsonl', '')
+        const raw = text.split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l) } catch (e) { return null } }).filter(Boolean)
+        for (const d of raw) { d.project = proj; await enrichDispatch(d); out.push(d) }
+      }
+      return out
     }
 
     async function taskDetail(taskId) {
