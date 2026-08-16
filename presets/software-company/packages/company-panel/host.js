@@ -352,35 +352,8 @@ export default {
     }
 
     // ================= Web API（面板数据源） =================
-    const webServer = ctx.get('webServer')
-    if (webServer !== undefined) {
-      try {
-        ctx.effect(() => webServer.register({
-          kind: 'prefix',
-          path: '/company-api',
-          handler: async function (req, res) {
-            try {
-              const u = new URL(req.url || '/', 'http://x')
-              const p = u.pathname
-              const q = u.searchParams
-              let out
-              if (p === '/company-api/dashboard') out = { tasks: await listAllTasks() }
-              else if (p === '/company-api/task') out = await taskDetail(q.get('taskId'))
-              else if (p === '/company-api/tokens') out = await tokensSnapshot()
-              else if (p === '/company-api/agents') out = { entries: agentLog.slice(-80), total: agentLog.length }
-              else if (p === '/company-api/action') out = await handleAction(q.get('taskId'), q.get('action'))
-              else { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return }
-              res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
-              res.end(JSON.stringify(out))
-            } catch (e) {
-              res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
-              res.end(JSON.stringify({ error: String((e && e.message) || e) }))
-            }
-          },
-        }))
-      } catch (e) {
-        // 预置实例可能已注册同路由：复用既有路由即可（数据同源）
-      }
-    }
+    // v2：/company-api 路由统一由 company-r2 注册（含 canvas/events/flow/contract 等新路由）。
+    // company-panel 不再注册，避免「先到先得」抢注旧路由集导致新路由 404。
+    // （保留本注释段作为历史说明；下方原注册块已移除。）
   },
 }
