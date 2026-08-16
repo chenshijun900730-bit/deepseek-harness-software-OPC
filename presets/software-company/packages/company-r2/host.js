@@ -142,15 +142,31 @@ export default {
       } catch (e) {}
       return undefined
     }
+    // Web 请求期间置位：defaultProjectDir 不依赖「当前发起会话」（某个刚活动过的
+    // 会话会劫持全局数据目录——重启后 liunx 会话先活动，画布就串到 liunx 项目）。
+    let inWebRequest = 0
     async function defaultProjectDir() {
-      try {
-        const session = callSession()
-        if (session && session.header && typeof session.header.cwd === 'string' && session.header.cwd) return session.header.cwd
-      } catch (e) {}
+      if (inWebRequest <= 0) {
+        try {
+          const session = callSession()
+          if (session && session.header && typeof session.header.cwd === 'string' && session.header.cwd) return session.header.cwd
+        } catch (e) {}
+      }
       try {
         const ws = ctx.get('workspaceRegistry')
         const list = ws ? ws.list() : undefined
-        if (list && list.length && list[0] && typeof list[0].path === 'string' && list[0].path) return list[0].path
+        if (list && list.length) {
+          // 首选已有公司任务目录的工作区（而非仅注册顺序）
+          for (const w of list) {
+            if (!w || typeof w.path !== 'string' || !w.path) continue
+            try {
+              const t = await fsService.resolve(w.path + '/.company-harness/tasks')
+              const info = await fsService.stat(t)
+              if (info && info.type === 'directory') return w.path
+            } catch (e) {}
+          }
+          if (list[0] && typeof list[0].path === 'string' && list[0].path) return list[0].path
+        }
       } catch (e) {}
       if (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot) return sandboxPolicy.workspaceRoot
       return await resolveAbs('.')
@@ -195,9 +211,25 @@ export default {
       if (reg.projects.indexOf(dir) < 0) { reg.projects.push(dir); await writeJsonAt(await registryFilePath(), reg) }
     }
     async function projectList() {
-      const seen = [await defaultProjectDir()]
-      const reg = await loadRegistry()
-      for (const p of reg.projects || []) { if (seen.indexOf(p) < 0) seen.push(p) }
+      // 合并所有已注册工作区及其 registry：多个项目各有一个 Company（游戏 / liunx / …）
+      const seen = []
+      const ws = ctx.get('workspaceRegistry')
+      if (ws) {
+        try {
+          const list = ws.list()
+          for (const w of list || []) {
+            if (!w || typeof w.path !== 'string' || !w.path) continue
+            if (seen.indexOf(w.path) < 0) seen.push(w.path)
+          }
+        } catch (e) {}
+      }
+      for (const base of seen.slice()) {
+        try {
+          const reg = await readJsonAt(base + '/.company-harness/registry.json')
+          for (const p of (reg && reg.projects) || []) { if (seen.indexOf(p) < 0) seen.push(p) }
+        } catch (e) {}
+      }
+      if (seen.length === 0) seen.push(await defaultProjectDir())
       return seen
     }
     async function loadTask(taskId) {
@@ -253,7 +285,7 @@ export default {
             const h = rec && rec.header
             if (!h || typeof h.id !== 'string') continue
             if (h.delegationDepth || h.origin === 'subagent') continue // 只列顶层会话
-            sessionMeta.set(h.id, { cwd: typeof h.cwd === 'string' ? h.cwd : '', title: await cachedTitle(sq, h.id) })
+            sessionMeta.set(h.id, { cwd: typeof h.cwd === 'string' ? h.cwd : '', title: await cachedTitle(sq, h.id), live: !!rec.live })
           }
         } catch (e) { /* listSessions 不可用时退化为仅任务会话 */ }
       }
@@ -278,6 +310,9 @@ export default {
         let cwd = g.project
         const meta = g.sessionId ? sessionMeta.get(g.sessionId) : undefined
         if (meta) {
+          // 隐藏既无公司任务、又无标题、且非存活的会话（减少清单噪音）；
+          // 存活会话即使无任务也保留——点击侧栏即可跟随切换。
+          if (g.tasks === 0 && !meta.title && !meta.live) continue
           if (meta.title) title = meta.title
           if (meta.cwd) cwd = meta.cwd
         } else if (g.sessionId && sq !== undefined) {
@@ -931,6 +966,7 @@ export default {
         kind: 'prefix',
         path: '/company-api',
         handler: async function (req, res) {
+          inWebRequest++
           try {
             const u = new URL(req.url || '/', 'http://x')
             const p = u.pathname
@@ -953,6 +989,8 @@ export default {
           } catch (e) {
             res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
             res.end(JSON.stringify({ error: String((e && e.message) || e) }))
+          } finally {
+            inWebRequest--
           }
         },
       }))
