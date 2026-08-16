@@ -57,7 +57,7 @@
       el.style.cssText = 'left:' + pos[n.id].x + 'px;top:' + pos[n.id].y + 'px;width:130px;border-color:' + s.border + ';background:' + s.bg + ';color:' + s.color
       var toks = STATE.depts[n.dept] ? ' · ⚡ ' + fmt(STATE.depts[n.dept].totalTokens) : ''
       el.innerHTML = (st === 'done' ? '✅ ' : (st === 'working' ? '⚙ ' : '⏳ ')) + (n.title || n.id) + '<small>' + n.dept + toks + '</small>'
-      el.addEventListener('click', function () { openDept(n) })
+      el.addEventListener('click', function () { if (justMoved) return; openDept(n) })
       el.addEventListener('mousedown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
         var r = cv.getBoundingClientRect()
@@ -258,7 +258,8 @@
       el.style.cssText = 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w + 'px;border-color:' + s.border + ';background:' + s.bg + ';color:' + s.color
       var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
       el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + toks + '</small>'
-      el.addEventListener('click', function () { openOrgDept(o.id) })
+      el.addEventListener('click', function () { if (justMoved) return; openOrgDept(o.id) })
+      el.addEventListener('mousedown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
         showTip(ev, '<h4>🏢 ' + (r.title || o.id) + '</h4><div style="color:#9ca3af;">模型：' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
           '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) + '<br/>点击查看调用记录</div>', el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
@@ -317,7 +318,8 @@
         card.style.cssText = 'left:' + (base.offsetLeft + 4) + 'px;top:' + (base.offsetTop - 18 - i * 16) + 'px;width:' + (base.offsetWidth - 8) + 'px;'
         var task = d.taskId ? d.taskId.replace('TASK-', 'T').replace(/-\d{8}-/, '-') : '?'
         var model = d.model ? d.model.replace('deepseek-v4-', '') : '?'
-        card.innerHTML = '<b>' + String(d.at || '').slice(11, 16) + '</b> ' + task + '<br/><span>' + model + ' · ⚡' + fmt(d.tokens || 0) + '</span>'
+        card.innerHTML = '<b>' + String(d.at || '').slice(11, 16) + '</b> ' + task + ' · ' + fmtDur(d.durationMs) + '<br/><span>' + model + ' · ⚡' + fmt(d.tokens || 0) + '</span>'
+        card.addEventListener('click', function () { if (justMoved) return; openCallDetail(d) })
         cv.appendChild(card)
       })
       if (overflow > 0) {
@@ -325,21 +327,46 @@
         more.className = 'call'
         more.style.cssText = 'left:' + (base.offsetLeft + 4) + 'px;top:' + (base.offsetTop - 18 - shown.length * 16) + 'px;width:' + (base.offsetWidth - 8) + 'px;'
         more.innerHTML = '<b>+' + overflow + '</b> 更早调用…'
+        more.addEventListener('click', function () { openOrgDept(dept) })
         cv.appendChild(more)
       }
     })
+  }
+  function fmtDur(ms) {
+    if (!ms || ms <= 0) return ''
+    if (ms < 60000) return Math.round(ms / 1000) + 's'
+    if (ms < 3600000) return (ms / 60000).toFixed(1) + 'min'
+    return (ms / 3600000).toFixed(1) + 'h'
   }
   function openOrgDept(id) {
     var r = roleOf(id)
     var d = STATE.depts[id] || {}
     var calls = deptCalls(id)
+    var recent = calls.slice(-10).reverse()
     fillPanel('<div style="font-weight:700;color:#7dd3fc;padding:6px 10px;">部门抽屉：' + (r.title || id) + '</div>' +
       '<div class="drawer"><div class="k">模型</div>' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
       '<div class="k" style="margin-top:6px;">token</div>累计 ' + fmt(d.totalTokens || 0) + ' · 排名 ' + (d.rank || '-') +
-      '<div class="k" style="margin-top:6px;">调用记录（' + (STATE.focusTask ? '聚焦任务 ' : '全部') + calls.length + ' 次）</div>' +
-      (calls.length ? calls.slice(-10).reverse().map(function (c) {
-        return '<div style="padding:3px 0;border-bottom:1px solid #141a26;">' + String(c.at || '').slice(11, 19) + ' · ' + (c.taskId || '?') + ' · ' + (c.model || '?') + ' · ⚡' + fmt(c.tokens || 0) + '</div>'
+      '<div class="k" style="margin-top:6px;">调用记录（' + (STATE.focusTask ? '聚焦任务 ' : '全部') + calls.length + ' 次 · 点行看详情）</div>' +
+      (recent.length ? recent.map(function (c, i) {
+        return '<div data-call-idx="' + i + '" style="padding:3px 0;border-bottom:1px solid #141a26;cursor:pointer;">' + String(c.at || '').slice(11, 19) + ' · ' + (c.taskId || '?') + ' · ' + fmtDur(c.durationMs) + ' · ' + (c.model || '?') + ' · ⚡' + fmt(c.tokens || 0) + '</div>'
       }).join('') : '<div style="color:#6b7280;">暂无调用记录</div>') +
+      '</div><div class="btn" style="margin:8px 10px;" onclick="window.__closePanel()">✕ 关闭</div>')
+    var drawer = $('rail-drawer')
+    if (!drawer) return
+    drawer.querySelectorAll('[data-call-idx]').forEach(function (row) {
+      row.addEventListener('click', function () { openCallDetail(recent[Number(row.getAttribute('data-call-idx'))]) })
+    })
+  }
+  function openCallDetail(d) {
+    if (!d) return
+    fillPanel('<div style="font-weight:700;color:#7dd3fc;padding:6px 10px;">📞 调用卡：' + (d.dept || '?') + '</div>' +
+      '<div class="drawer">' +
+      '<div class="k">时间</div>' + String(d.at || '').replace('T', ' ').slice(0, 19) + (d.durationMs ? ' · 时长 ' + fmtDur(d.durationMs) : '') +
+      '<div class="k" style="margin-top:6px;">任务</div>' + (d.taskId || '?') +
+      '<div class="k" style="margin-top:6px;">模型</div>' + (d.model || '?') +
+      '<div class="k" style="margin-top:6px;">token</div>' + fmt(d.tokens || 0) +
+      '<div class="k" style="margin-top:6px;">做了什么</div>' +
+      '<div style="white-space:pre-wrap;line-height:1.5;">' + ((d.prompt || '（未记录：旧派工无会话日志）').replace(/</g, '&lt;')) + '</div>' +
       '</div><div class="btn" style="margin:8px 10px;" onclick="window.__closePanel()">✕ 关闭</div>')
   }
   window.__setView = function (v) {
@@ -353,20 +380,37 @@
     if (STATE.view === 'flow') { if (STATE.flow) renderNodes(STATE.flow) } else { renderOrg() }
   }
 
+  var justMoved = false
   function startDrag(e) {
     e.preventDefault()
-    DRAG = { el: e.currentTarget, dx: e.clientX - e.currentTarget.offsetLeft, dy: e.clientY - e.currentTarget.offsetTop, moved: false }
+    DRAG = { el: e.currentTarget, dx: e.clientX - e.currentTarget.offsetLeft, dy: e.clientY - e.currentTarget.offsetTop, moved: false, org: e.currentTarget.id.indexOf('nd-dept-') === 0 }
     document.addEventListener('mousemove', onDrag)
     document.addEventListener('mouseup', endDrag)
-  }  function onDrag(e) {
+  }
+  function onDrag(e) {
     if (!DRAG) return
     DRAG.moved = true
     var r = cv.getBoundingClientRect()
     DRAG.el.style.left = Math.max(0, Math.min(1300, e.clientX - r.left - DRAG.dx)) + 'px'
     DRAG.el.style.top = Math.max(0, Math.min(500, e.clientY - r.top - DRAG.dy)) + 'px'
-    renderEdges(STATE.flow)
+    if (DRAG.org) {
+      // 组织视图节点：拖动位置写回布局，连线与调用卡跟随
+      var id = DRAG.el.id.slice('nd-dept-'.length)
+      for (var i = 0; i < ORG.length; i++) {
+        if (ORG[i].id === id) { ORG[i].x = DRAG.el.offsetLeft; ORG[i].y = DRAG.el.offsetTop; break }
+      }
+      renderOrgEdges()
+      renderCallCards()
+    } else {
+      renderEdges(STATE.flow)
+    }
   }
-  function endDrag() { DRAG = null; document.removeEventListener('mousemove', onDrag); document.removeEventListener('mouseup', endDrag) }
+  function endDrag() {
+    if (DRAG && DRAG.moved) { justMoved = true; setTimeout(function () { justMoved = false }, 0) }
+    DRAG = null
+    document.removeEventListener('mousemove', onDrag)
+    document.removeEventListener('mouseup', endDrag)
+  }
 
   var tok = { cur: 0, target: 0, started: false }
   // 常驻缓动循环：向最新 target 平滑趋近；显示值不变时不重写文本（消除无谓的每帧 DOM 写入）

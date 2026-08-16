@@ -1002,6 +1002,8 @@ export default {
           model: row && row.model ? row.model : '',
           modelProvider: row && row.modelProvider ? row.modelProvider : '',
           tokens: row ? (row.totalTokens || 0) : 0,
+          prompt: String(d.prompt || '').slice(0, 400),
+          durationMs: typeof d.durationMs === 'number' ? d.durationMs : null,
         })
       }
       callList.sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')) })
@@ -1038,17 +1040,25 @@ export default {
       if (cached !== undefined && Date.now() - cached.at < 120000) {
         d.department = cached.dept
         d.taskId = cached.taskId
+        d.prompt = cached.prompt
+        d.durationMs = cached.durationMs
         return d
       }
-      let dept, taskId
+      let dept, taskId, prompt, startTime, endTime
       try {
         const sq = ctx.get('sessionQuery')
         if (sq !== undefined) {
           const snap = await sq.readSession(d.sessionId)
-          for (const e of (snap && snap.events) || []) {
+          const evs = (snap && snap.events) || []
+          for (const e of evs) {
+            if (e && typeof e.time === 'number') {
+              if (startTime === undefined || e.time < startTime) startTime = e.time
+              if (endTime === undefined || e.time > endTime) endTime = e.time
+            }
             if (e && e.type === 'user/message' && e.data && Array.isArray(e.data.content)) {
               for (const c of e.data.content) {
                 if (c && typeof c.text === 'string') {
+                  if (!prompt && c.text.length > 40) prompt = c.text
                   const m = c.text.match(/软件公司 Harness 中的\s*\**([^*\n]+)\**/)
                   if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
                   const t = c.text.match(/(?:（任务|任务编号[：:])\s*([A-Z][A-Z0-9-]*)/)
@@ -1056,13 +1066,16 @@ export default {
                 }
               }
             }
-            if (dept && taskId) break
+            if (dept && taskId && prompt) break
           }
         }
       } catch (e) {}
-      dispatchEnrichCache.set(d.sessionId, { at: Date.now(), dept, taskId })
+      const durationMs = (startTime !== undefined && endTime !== undefined) ? Math.max(0, endTime - startTime) : undefined
+      dispatchEnrichCache.set(d.sessionId, { at: Date.now(), dept, taskId, prompt, durationMs })
       d.department = dept
       d.taskId = taskId
+      d.prompt = prompt
+      d.durationMs = durationMs
       return d
     }
     async function listDispatchRecords() {
