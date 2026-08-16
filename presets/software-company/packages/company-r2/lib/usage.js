@@ -10,7 +10,7 @@ export function attributeUsage(rows, dispatches, companySessionIds) {
   for (const r of rows || []) {
     const d = bySession.get(r.id)
     if (d) {
-      out.push({ taskId: d.taskId || null, department: d.department || 'coordinator', totalTokens: r.totalTokens || 0, surfaceTokens: r.surfaceTokens || 0, sessionId: r.id })
+      out.push({ taskId: d.taskId || null, project: d.project || null, department: d.department || 'coordinator', totalTokens: r.totalTokens || 0, surfaceTokens: r.surfaceTokens || 0, sessionId: r.id })
     } else if (r.isRoot && companySessionIds && companySessionIds.has(r.id)) {
       out.push({ taskId: null, department: 'coordinator', totalTokens: r.totalTokens || 0, surfaceTokens: r.surfaceTokens || 0, sessionId: r.id })
     }

@@ -542,19 +542,38 @@
   }
   function deptNodeOf(dept) { return $('nd-dept-' + dept) }
   // Token 增长：部门累计用量跨过阈值时浮现「⚡+Δ」
+  var prevDeptSurface = {}
+  var lastSurfChipAt = {}
   function spawnTokenChips() {
     if (STATE.view !== 'org') return
     Object.keys(STATE.depts || {}).forEach(function (k) {
-      var total = STATE.depts[k].totalTokens || 0
+      var d = STATE.depts[k] || {}
+      var total = d.totalTokens || 0
       var prev = prevDeptTokens[k]
       if (prev !== undefined && total > prev) {
         var delta = total - prev
-        if (delta >= Math.max(500, prev * 0.005)) {
+        // 阈值放宽：原 0.5% 相对阈值对百万级部门几乎永不触发（27M × 0.5% = 137k）
+        var threshold = Math.max(200, Math.min(5000, Math.round(prev * 0.001)))
+        if (delta >= threshold) {
           var el = deptNodeOf(k)
-          if (el) spawnChip('<b>⚡ +' + fmt(delta) + '</b> ' + (STATE.depts[k].title || k), el.offsetLeft + 8, el.offsetTop - 6)
+          if (el) spawnChip('<b>⚡ +' + fmt(delta) + '</b> ' + (d.title || k), el.offsetLeft + 8, el.offsetTop - 6)
         }
       }
       prevDeptTokens[k] = total
+      // 表面增长浮层：流式生成期间浮现「⇧ +Δ」（8s 冷却/部门，避免每秒刷屏）
+      var surf = d.surfaceTokens || 0
+      var prevS = prevDeptSurface[k]
+      if (prevS !== undefined && surf > prevS) {
+        var sDelta = surf - prevS
+        var sThreshold = Math.max(200, Math.min(3000, Math.round(prevS * 0.002)))
+        var nowT = Date.now()
+        if (sDelta >= sThreshold && (!lastSurfChipAt[k] || nowT - lastSurfChipAt[k] > 8000)) {
+          lastSurfChipAt[k] = nowT
+          var elS = deptNodeOf(k)
+          if (elS) spawnChip('<b>⇧ +' + fmt(sDelta) + '</b> ' + (d.title || k), elS.offsetLeft + 8, elS.offsetTop - 6)
+        }
+      }
+      prevDeptSurface[k] = surf
     })
   }
   // 新调用：每次新的部门调用浮现「📞 新调用」

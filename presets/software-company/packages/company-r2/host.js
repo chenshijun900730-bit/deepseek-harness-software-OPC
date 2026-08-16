@@ -329,22 +329,26 @@ export default {
       return rows
     }
     // 按会话过滤任务：无 sessionId 的旧任务按目录归属（会话 cwd 与任务目录一致即视为该会话的公司）
+    function taskKey(project, taskId) { return String(project || '') + '\u0000' + String(taskId || '') }
     async function scopedTaskIds(scope, taskList) {
       if (!scope) return null
       const sessions = await sessionsSnapshot()
-      const s = sessions.find(function (x) { return x.sessionId === scope })
+      let s = sessions.find(function (x) { return x.sessionId === scope })
+      // 短 id（画布 ?scope= 前缀）兜底匹配
+      if (!s) s = sessions.find(function (x) { return x.sessionId && String(x.sessionId).indexOf(scope) === 0 })
       const cwd = s ? s.cwd : null
       const ids = new Set()
       for (const t of taskList) {
-        if (t.sessionId === scope) ids.add(t.taskId)
-        else if (!t.sessionId && cwd && t.project === cwd) ids.add(t.taskId)
+        // 复合键 project+taskId：多项目合并后同 taskId 跨项目重名，不能再按 taskId 过滤
+        if ((s && t.sessionId === s.sessionId) || t.sessionId === scope) ids.add(taskKey(t.project, t.taskId))
+        else if (!t.sessionId && cwd && t.project === cwd) ids.add(taskKey(t.project, t.taskId))
       }
       return ids
     }
     async function scopedListAllTasks(scope) {
       const tasks = await listAllTasks()
       const ids = await scopedTaskIds(scope, tasks)
-      return ids ? tasks.filter(function (t) { return ids.has(t.taskId) }) : tasks
+      return ids ? tasks.filter(function (t) { return ids.has(taskKey(t.project, t.taskId)) }) : tasks
     }
     async function allocTaskId(base) {
       const tasksDir = base + '/.company-harness/tasks'
@@ -419,6 +423,7 @@ export default {
         if (!n || n.skipped || done.has(n.id) || started.has(n.id)) return
         started.add(n.id); changed = true
         appendEvent(eventsFileFor(state), { type: 'stage.started', taskId: state.taskId, stage: n.id })
+        issueHandoffContracts(state, n.id).catch(function () {})
       }
       const complete = function (n) {
         if (!n || n.skipped || done.has(n.id)) return
@@ -1084,6 +1089,31 @@ export default {
       return { ok: true }
     }
 
+    // 环节派工即生成交接契约（依赖环节 → 本环节）：画布连线上的 📄 图标据此显示。
+    // 之前 issueContract 定义了却没有任何调用点 → contracts/ 目录永远为空、图标永不出现。
+    async function issueHandoffContracts(state, stageId) {
+      if (!state.flow || !Array.isArray(state.flow.nodes)) return []
+      const nodes = state.flow.nodes
+      const node = nodes.find(function (n) { return n.id === stageId })
+      if (!node || node.skipped) return []
+      const done = new Set(Object.keys(state.flow.done || {}))
+      const issued = []
+      for (const needId of node.needs || []) {
+        const dep = nodes.find(function (n) { return n.id === needId })
+        if (!dep || dep.skipped || !done.has(needId)) continue
+        const f = contractsDirOf(state) + '/' + needId + '__' + stageId + '.md'
+        try {
+          if ((await readTextAt(f)) !== undefined) continue
+          await issueContract(state, needId, stageId, {
+            modules: [(dep.title || dep.id) + ' → ' + (node.title || node.id) + ' 交接（引擎自动生成，环节双方按需填充）'],
+            apiSignatures: [], nonGoals: [],
+          })
+          issued.push(needId + '→' + stageId)
+        } catch (e) {}
+      }
+      return issued
+    }
+
     async function agentsLogSnapshot() {
       // 多项目合并子代理日志：读全部项目的 agents-log.jsonl + 内存未落盘条目
       const seen = new Set()
@@ -1138,7 +1168,7 @@ export default {
       const scope = q.get('scope')
       if (scope) {
         const ids = await scopedTaskIds(scope, await listAllTasks())
-        if (ids) out = out.filter(function (ev) { return !ev.taskId || ids.has(ev.taskId) })
+        if (ids) out = out.filter(function (ev) { return !ev.taskId || ids.has(taskKey(ev.project, ev.taskId)) })
       }
       return { events: out }
     }
@@ -1216,9 +1246,9 @@ export default {
       const companySessionIds = new Set(allTasks.map(function (t) { return t.sessionId }).filter(Boolean))
       const attributed = attributeUsage(tokens.rows || [], dispatches, companySessionIds)
       const ids = await scopedTaskIds(scope, allTasks)
-      const tasks = ids ? allTasks.filter(function (t) { return ids.has(t.taskId) }) : allTasks
+      const tasks = ids ? allTasks.filter(function (t) { return ids.has(taskKey(t.project, t.taskId)) }) : allTasks
       // 会话隔离：部门聚合/活跃部门/调用明细/总量都只算该会话任务归属的部分
-      const scopedAttributed = ids ? attributed.filter(function (a) { return !a.taskId || ids.has(a.taskId) }) : attributed
+      const scopedAttributed = ids ? attributed.filter(function (a) { return !a.taskId || ids.has(taskKey(a.project, a.taskId)) }) : attributed
       const depts = aggregateByDepartment(scopedAttributed)
       // 部门档案并入（模型/reasoning/中文名），画布抽屉与悬停卡直接展示
       for (const k of Object.keys(depts)) {
@@ -1241,7 +1271,7 @@ export default {
       const callList = []
       for (const d of dispatches) {
         if (!d.department || !d.sessionId) continue
-        if (ids && d.taskId && !ids.has(d.taskId)) continue
+        if (ids && d.taskId && !ids.has(taskKey(d.project, d.taskId))) continue
         const row = tokenById.get(d.sessionId)
         callList.push({
           dept: d.department, taskId: d.taskId || null, at: d.at || d.ts || null,
@@ -2123,7 +2153,8 @@ export default {
         state.flow.started = [...started]
         await saveState(state)
         appendEvent(eventsFileFor(state), { type: 'stage.started', taskId: state.taskId, stage: args.stage })
-        return { ok: true, stage: args.stage, status: 'started' }
+        const contracts = await issueHandoffContracts(state, args.stage)
+        return { ok: true, stage: args.stage, status: 'started', contracts }
       }
       const missing = (node.needs || []).filter(function (x) {
         const dep = nodes.find(function (n) { return n.id === x })
