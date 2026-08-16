@@ -1326,6 +1326,20 @@ export default {
     // 派工记录补全：从子代理会话首条用户消息解析「…软件公司 Harness 中的 **角色**…（任务 TASK-…）」
     // 得到 department（角色 id）与 taskId。缓存 120s，避免 2s 轮询反复读会话日志。
     const dispatchEnrichCache = new Map()
+    // 新版派工格式「你是「角色名」角色（…）」：按提示词头部最先出现的角色识别
+    function roleIdInPromptHead(text) {
+      if (!text) return undefined
+      const head = String(text).slice(0, 400).toLowerCase()
+      let best = undefined
+      let bestIdx = Infinity
+      for (const r of Object.values(ROLES)) {
+        let idx = r.title ? head.indexOf(String(r.title).toLowerCase()) : -1
+        const idx2 = head.indexOf(String(r.id || '').toLowerCase())
+        if (idx2 >= 0 && (idx < 0 || idx2 < idx)) idx = idx2
+        if (idx >= 0 && idx < bestIdx) { bestIdx = idx; best = r.id }
+      }
+      return best
+    }
     function roleIdOfTitle(t) {
       if (!t) return undefined
       const s = String(t).toLowerCase()
@@ -1350,7 +1364,7 @@ export default {
       }
       // 2) 落盘 sidecar（按项目；跨重启，读一次日志后永久复用）
       const stored = (await loadDispatchEnrichMap(proj))[sid]
-      if (stored !== undefined && stored.dept !== undefined) {
+      if (stored !== undefined && stored.dept !== undefined && stored.taskId !== undefined) {
         dispatchEnrichCache.set(sid, { at: Date.now(), dept: stored.dept, taskId: stored.taskId, prompt: stored.prompt, durationMs: stored.durationMs })
         d.department = stored.dept
         d.taskId = stored.taskId
