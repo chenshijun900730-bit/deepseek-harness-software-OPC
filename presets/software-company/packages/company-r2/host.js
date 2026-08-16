@@ -1,3 +1,10 @@
+import nodeFs from 'node:fs'
+import { FLOW_TEMPLATES, STAGES_LEGACY, validateFlow, readyNodes, adjustFlow } from './lib/flow.js'
+import { createEventsFile, appendEvent, readSince } from './lib/events.js'
+import { buildContract, validateContract, signContract, renderContractMarkdown, assertionBadges } from './lib/contract.js'
+import { attributeUsage, aggregateByDepartment } from './lib/usage.js'
+import { DEPT_ID_RE, validateHire, renderDeptPresetYml, mergeRole, undoRole } from './lib/hire.js'
+
 export default {
   name: 'software-company-harness',
   inject: ['fs', 'tools', 'timer'],
@@ -5,23 +12,20 @@ export default {
     const fsService = ctx.fs
     const sandboxPolicy = ctx.get('sandboxPolicy')
 
-    // ================= 角色库（固定 14 + 1） =================
-    const ROLES = {
+    // ================= 角色库（单一来源：preset 根 roles/roles.json；reasoning 已按五刀④分档） =================
+    const ROLES_FILE = new URL('../../roles/roles.json', import.meta.url).pathname
+    const ROLES_FALLBACK = {
       'coordinator': { id: 'coordinator', title: 'Coordinator 项目总控', model: 'deepseek-v4-pro', reasoning: 'max', duties: '分类、组队、派工、状态推进、冲突裁决、暂停与升级', forbidden: '不直接编码；不替 QA 放行' },
-      'planner': { id: 'planner', title: 'Planner 产品经理', model: 'deepseek-v4-pro', reasoning: 'high', duties: '产品蓝图、用户故事、范围、非目标、Sprint 路线', forbidden: '不提前规定无必要的实现细节' },
-      'architect': { id: 'architect', title: '架构负责人', model: 'deepseek-v4-pro', reasoning: 'high', duties: '模块边界、接口、数据结构、技术风险、依赖顺序', forbidden: '不承担产品取舍或最终验收' },
       'generator': { id: 'generator', title: '主程序员 Generator', model: 'deepseek-v4-pro', reasoning: 'high', duties: '实现策略、核心代码、自检、协调部门程序员', forbidden: '不修改验收结论；不批准自己' },
-      'department-generator': { id: 'department-generator', title: '部门程序员', model: 'deepseek-v4-pro', reasoning: 'high', duties: '分别实现前端、后端、数据等独立模块', forbidden: '不越过文件所有权；不改共享表面' },
-      'integrator': { id: 'integrator', title: 'Integrator 集成负责人', model: 'deepseek-v4-pro', reasoning: 'high', duties: '合并提交、处理共享表面、解决集成冲突、全量回归', forbidden: '不绕过失败验收' },
-      'sprint-evaluator': { id: 'sprint-evaluator', title: 'Sprint Evaluator', model: 'deepseek-v4-pro', reasoning: 'high', duties: '审核合同，对单轮签发 PASS/FAIL', forbidden: '不参与本轮编码；不修业务代码' },
-      'final-evaluator': { id: 'final-evaluator', title: '最终验收负责人', model: 'deepseek-v4-pro', reasoning: 'high', duties: '在干净环境完成跨 Sprint 端到端验收', forbidden: '不参与任何 Sprint 实现' },
-      'security-reviewer': { id: 'security-reviewer', title: '安全/数据迁移评审', model: 'deepseek-v4-pro', reasoning: 'high', duties: '权限、支付、隐私、删除、迁移专项检查', forbidden: '不以普通功能通过替代安全通过' },
-      'explorer': { id: 'explorer', title: 'Explorer 调查员', model: 'deepseek-v4-flash', reasoning: 'medium', duties: '仓库、官方资料、依赖、测试入口和风险调查', forbidden: '只读；不修改代码' },
-      'qa-runner': { id: 'qa-runner', title: 'QA 执行员', model: 'deepseek-v4-flash', reasoning: 'medium', duties: 'UI、API、数据库、构建和回归测试；采集证据', forbidden: '不判最终结论；不修业务代码' },
-      'mechanical-worker': { id: 'mechanical-worker', title: 'Mechanical Worker', model: 'deepseek-v4-flash', reasoning: 'low', duties: '明确、重复、可批量验证的机械任务', forbidden: '不处理歧义、架构或跨模块决策' },
-      'recorder': { id: 'recorder', title: 'Recorder 项目秘书', model: 'deepseek-v4-flash', reasoning: 'low', duties: '状态、用量、证据索引、HANDOFF 和项目收据', forbidden: '只记录事实；不做产品或技术决策' },
-      'repair-generator': { id: 'repair-generator', title: 'Repair Generator', model: 'deepseek-v4-pro', reasoning: 'high', duties: '根据冻结的失败报告定点修复', forbidden: '不扩大范围；不重写合同；不自行放行' },
     }
+    let ROLES = ROLES_FALLBACK
+    function loadRoles() {
+      try {
+        const data = JSON.parse(nodeFs.readFileSync(ROLES_FILE, 'utf8'))
+        if (Array.isArray(data.roles)) ROLES = Object.fromEntries(data.roles.map((r) => [r.id, r]))
+      } catch (e) { /* 保留兜底 */ }
+    }
+    loadRoles()
     const IMPLEMENTATION_ROLES = ['generator', 'department-generator', 'integrator', 'repair-generator']
     const CONCURRENCY_CAP = { small: 1, medium: 3, complex: 2, 'high-risk': 2 }
 
