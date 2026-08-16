@@ -617,7 +617,7 @@ export default {
         }
       } catch (e) {}
     }
-    ctx.on('subagent/start', function (info) { pushAgentLog('start', info); try { recordDispatch({ sessionId: info && info.id, at: now() }) } catch (e) {} })
+    ctx.on('subagent/start', function (info) { pushAgentLog('start', info); recordDispatch({ sessionId: info && info.id, at: now() }).catch(function () {}) })
     ctx.on('subagent/end', function (info) { pushAgentLog('end', info); enrichAgentLog() })
     ctx.interval(function () { enrichAgentLog() }, 120000)
 
@@ -846,16 +846,18 @@ export default {
       return out
     }
 
-    function explorationFileFor(hash) {
-      const dir = process.cwd() + '/.company-harness/explorations'
+    async function explorationFileFor(hash) {
+      const base = await defaultProjectDir()
+      const dir = base + '/.company-harness/explorations'
       ensureDir(dir)
       return dir + '/' + hash + '.json'
     }
 
     const CONCURRENCY = { limit: 3 }
-    function setConcurrencyLimit(n) {
+    async function setConcurrencyLimit(n) {
       CONCURRENCY.limit = n
-      appendEvent(createEventsFile(process.cwd() + '/.company-harness/events'), { type: 'concurrency.changed', limit: n })
+      const base = await defaultProjectDir()
+      appendEvent(createEventsFile(base + '/.company-harness/events'), { type: 'concurrency.changed', limit: n })
       return n
     }
     function activeAgents() {
@@ -884,7 +886,8 @@ export default {
     }
 
     async function eventsSnapshot(q) {
-      const file = createEventsFile(process.cwd() + '/.company-harness/events')
+      const base = await defaultProjectDir()
+      const file = createEventsFile(base + '/.company-harness/events')
       const afterSeq = Number(q.get('seq') || 0)
       const events = readSince(file, afterSeq)
       return { events, nextSeq: events.length ? events[events.length - 1].seq : afterSeq }
@@ -924,10 +927,13 @@ export default {
       }
     }
 
-    const DISPATCH_FILE = process.cwd() + '/.company-harness/dispatches.jsonl'
-    function recordDispatch(d) { appendEvent(DISPATCH_FILE, d) }
+    async function dispatchFile() {
+      const base = await defaultProjectDir()
+      return base + '/.company-harness/dispatches.jsonl'
+    }
+    async function recordDispatch(d) { appendEvent(await dispatchFile(), d) }
     async function listDispatchRecords() {
-      const text = await readTextAt(DISPATCH_FILE)
+      const text = await readTextAt(await dispatchFile())
       if (!text) return []
       return text.split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l) } catch (e) { return null } }).filter(Boolean)
     }
@@ -957,7 +963,7 @@ export default {
       }
       if (action === 'hire' || action === 'upgradeDept' || action === 'undoHire') {
         const deptRoot = new URL('../../../../.agent-presets/', import.meta.url).pathname
-        const evFile = createEventsFile(process.cwd() + '/.company-harness/events')
+        const evFile = createEventsFile(await defaultProjectDir() + '/.company-harness/events')
         if (action === 'hire') {
           const req = JSON.parse((q && q.get('req')) || 'null')
           if (!req) return { ok: false, error: 'req 必填' }
