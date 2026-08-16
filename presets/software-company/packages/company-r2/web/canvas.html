@@ -87,6 +87,11 @@
     <span class="btn" id="bell" onclick="openApprove()">🔔 1 待批准</span>
   </div>
 
+  <div id="engineBanner" style="display:none;margin:10px 16px 0;padding:12px 16px;background:#2b1b10;border:1px solid #b45309;border-radius:10px;font-size:12px;color:#fdba74;line-height:1.7;">
+    ⚠ 画布数据不可用：当前会话未挂载公司引擎（<code>/company-api</code> 无响应，返回的是宿主页面而非 JSON）。<br/>
+    请在会话模式选择器中切换到 <b>Software Company 公司模式</b>（或打开一个公司会话），画布会每 2s 自动重试并开始拉取真实数据。
+  </div>
+
   <div class="main">
     <div class="cv" id="cv">
       <svg id="edges" width="1376" height="560" style="position:absolute;left:0;top:0;">

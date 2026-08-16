@@ -20,9 +20,28 @@
   }
 
   function api(path) {
-    return fetch(path, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+    return fetch(path, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      // /company-api 只在公司引擎（Software Company 预置）挂载时注册；未挂载时
+      // 请求落到宿主 SPA fallback，返回 HTML。此时 r.json() 会抛 SyntaxError 且
+      // 被静默吞掉 → 画布永远空白。这里显式识别并给出可读错误。
+      var ct = String(r.headers.get('content-type') || '')
+      if (ct.indexOf('json') === -1) throw new Error('engine-not-mounted (content-type=' + ct + ')')
+      return r.json()
+    })
   }
   function fmt(n) { return n >= 1000000 ? (n / 1000000).toFixed(2) + 'M' : (n / 1000).toFixed(1) + 'k' }
+
+  // ================= 引擎不可用提示 =================
+  // /company-api 由 Software Company 预置（按会话挂载）注册；仅宿主面板常驻。
+  // 无公司会话时画布数据接口不可用 → 显示明确横幅（不再静默空白），数据恢复后自动隐藏。
+  var engineDown = false
+  function showEngineDown(on) {
+    if (on === engineDown) return
+    engineDown = on
+    var b = $('engineBanner')
+    if (b) b.style.display = on ? 'block' : 'none'
+  }
 
   function layout(nodes) {
     var pos = {}, placed = new Set(), rows = []
@@ -789,6 +808,7 @@
       })
     }).catch(function () {})
     api('/company-api/canvas' + (STATE.scope ? '?scope=' + encodeURIComponent(STATE.scope) : '')).then(function (d) {
+      showEngineDown(false)
       STATE.tasks = d.tasks || []
       STATE.depts = d.depts || {}
       STATE.dispatchDepts = d.dispatchDepts || {}
@@ -831,7 +851,10 @@
       } else {
         if (STATE.view === 'org') renderOrg()
       }
-    }).catch(function () {})
+    }).catch(function (e) {
+      showEngineDown(true)
+      if (window.console) console.warn('[company-canvas] 数据接口不可用：', e && e.message ? e.message : e)
+    })
     // 会话清单 + 自动识别当前对话框（每个对话框一个 Company）
     api('/company-api/sessions').then(function (d) {
       STATE.sessions = Array.isArray(d) ? d : []
