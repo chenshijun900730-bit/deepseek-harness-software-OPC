@@ -108,7 +108,12 @@
   canvasBtn.addEventListener('click', function () { canvasOpen = !canvasOpen; render() })
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
-  closeBtn.addEventListener('click', function () { open = false; render() })
+  closeBtn.addEventListener('click', function () {
+    open = false
+    root.style.top = '12px'; root.style.right = '12px'; root.style.left = 'auto'
+    panelTop = 12
+    render()
+  })
   const popoutBtn = el('button', btnStyle('#7dd3fc'), '\u29C9 \u72EC\u7ACB\u7A97\u53E3')
   popoutBtn.title = '把总监大画布弹出为独立窗口（可随意拖动，不局限在浏览器内）'
   popoutBtn.addEventListener('click', function () {
@@ -117,6 +122,16 @@
       if (w) w.focus()
     } catch (e) {}
   })
+  if (window.documentPictureInPicture && window.documentPictureInPicture.requestWindow) {
+    const pipBtn = el('button', btnStyle('#f59e0b'), '\uD83D\uDCCC \u60AC\u6D6E\u7F6E\u9876')
+    pipBtn.title = '弹出为置顶悬浮窗（OS 窗口：可拖到任意屏幕，始终悬于其他应用之上）'
+    pipBtn.addEventListener('click', function () {
+      window.documentPictureInPicture.requestWindow({ width: 1520, height: 880 }).then(function (pip) {
+        pip.location.href = '/company' + (scope ? '?scope=' + encodeURIComponent(scope) : '')
+      }).catch(function () {})
+    })
+    headerBtns.appendChild(pipBtn)
+  }
   headerBtns.appendChild(scopeSel); headerBtns.appendChild(popoutBtn); headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
   header.appendChild(title); header.appendChild(headerBtns)
 
