@@ -1380,7 +1380,8 @@ export default {
                   const m = c.text.match(/软件公司 Harness\s*(?:中)?的\s*\*{1,2}([^*\n]{2,40})\*{1,2}/)
                   if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
                   const t = c.text.match(/TASK-\d{8}-\d{3}/)
-                  if (t && !taskId) taskId = t[1]
+                  if (t && !taskId) taskId = t[0]
+                  if (!dept) dept = roleIdInPromptHead(c.text)
                 }
               }
             }
@@ -1407,7 +1408,8 @@ export default {
                     const m = c.text.match(/软件公司 Harness\s*(?:中)?的\s*\*{1,2}([^*\n]{2,40})\*{1,2}/)
                     if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
                     const t = c.text.match(/TASK-\d{8}-\d{3}/)
-                    if (t && !taskId) taskId = t[1]
+                    if (t && !taskId) taskId = t[0]
+                    if (!dept) dept = roleIdInPromptHead(c.text)
                   }
                 }
               }
