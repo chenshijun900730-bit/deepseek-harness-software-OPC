@@ -1,0 +1,19 @@
+{
+  "name": "software-company-harness",
+  "version": "1.0.0",
+  "description": "软件公司 Harness：14+1 角色库、任务事实层、状态机、批准门禁、合同冻结、所有权互斥、失败修复硬路由、成本护栏，附流程进度/子代理日志/Token 可视化面板",
+  "type": "module",
+  "main": "./host.js",
+  "exports": {
+    ".": "./host.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,2 @@
+name: Software Company 公司模式
+description: 软件公司 Harness 开发模式：需求先冻结为可验收规格与 Sprint 合同，编码/验收独立，失败走修复硬路由；面板实时显示流程进度、子代理调用与 Token 消耗。
