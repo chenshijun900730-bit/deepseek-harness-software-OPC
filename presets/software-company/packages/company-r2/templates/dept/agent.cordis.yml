@@ -1,0 +1,9 @@
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      你是公司的一个执行部门，只完成派给你的环节，不修改公司状态、合同与台账。
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536

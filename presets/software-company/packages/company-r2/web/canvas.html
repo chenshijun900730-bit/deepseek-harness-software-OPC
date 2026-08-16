@@ -1,0 +1,148 @@
+<h2>总监大画布</h2><p class="subtitle">真实数据 2s 增量拉取 · 节点可拖动连线跟随 · 悬停看信息卡 · 画布上直接审批/决策</p>
+
+<style>
+  .app { width:1712px; background:#0b0f19; border:1px solid #1f2937; border-radius:14px; overflow:hidden;
+         font-family:system-ui,sans-serif; color:#e5e7eb; }
+  .cap-strip { display:flex; align-items:center; gap:10px; padding:10px 16px; background:#111827; border-bottom:1px solid #1f2937; font-size:12px; }
+  .cap-pill { background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:22px; padding:8px 16px;
+              font-weight:600; box-shadow:0 4px 16px rgba(0,0,0,.35); }
+  .cap-note { color:#6b7280; font-size:11px; }
+  .bar { display:flex; align-items:center; gap:14px; padding:10px 16px; background:#111827; border-bottom:1px solid #1f2937; flex-wrap:wrap; font-size:12px; }
+  .chip { padding:4px 12px; border-radius:14px; border:1px solid #374151; color:#9ca3af; cursor:pointer; font-size:12px; }
+  .chip.on { border-color:#f59e0b; color:#fbbf24; background:#1a1408; }
+  .sld { display:flex; gap:4px; align-items:center; }
+  .sld span { padding:3px 10px; border-radius:8px; border:1px solid #374151; cursor:pointer; color:#9ca3af; }
+  .sld span.on { background:#14532d; color:#86efac; border-color:#22c55e; }
+  .btn { padding:5px 12px; border-radius:8px; border:1px solid #374151; background:transparent; color:#e5e7eb; cursor:pointer; font-size:12px; }
+  .btn.amber { border-color:#f59e0b; color:#fbbf24; }
+  .main { display:flex; }
+  .cv { position:relative; width:1376px; height:560px; background:#0d1117;
+        background-image: radial-gradient(circle, #1f2937 1px, transparent 1px);
+        background-size: 24px 24px; }
+  .nd { position:absolute; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:600;
+        border:2px solid; cursor:grab; box-sizing:border-box; z-index:2; user-select:none; }
+  .nd:active { cursor:grabbing; }
+  .nd small { display:block; font-weight:400; font-size:10px; color:#9ca3af; margin-top:2px; }
+  .nd.work { animation:glowPulse 2s infinite; }
+  .nd.work::after { content:''; position:absolute; inset:0; border-radius:8px; pointer-events:none;
+        background:linear-gradient(110deg, transparent 30%, rgba(196,181,253,.28) 50%, transparent 70%);
+        background-size:220% 100%; animation:shimmer 2.4s linear infinite; }
+  @keyframes glowPulse { 0%,100% { box-shadow:0 0 8px rgba(167,139,250,.35); } 50% { box-shadow:0 0 24px rgba(167,139,250,.85); } }
+  @keyframes shimmer { 0% { background-position:130% 0; } 100% { background-position:-130% 0; } }
+  .nd.adj { position:absolute; z-index:2; border-radius:50%; border:2px dashed #f59e0b; color:#fbbf24;
+            background:#1a1408; font-size:11px; padding:10px 8px; text-align:center; cursor:grab;
+            animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow:0 0 4px rgba(245,158,11,.3);} 50% { box-shadow:0 0 16px rgba(245,158,11,.7);} }
+  .rail { width:336px; background:#111827; border-left:1px solid #1f2937; display:flex; flex-direction:column; }
+  .rail h4 { font-size:11px; color:#7dd3fc; padding:8px 10px 4px; }
+  .ev { font-size:10.5px; color:#9ca3af; padding:3px 10px; border-bottom:1px solid #141a26; }
+  .ev b { color:#6b7280; font-weight:500; }
+  .doc-row { font-size:10.5px; padding:6px 10px; border-bottom:1px solid #141a26; cursor:pointer; }
+  .doc-row:hover { background:#0b0f19; }
+  .cv-tip { position:absolute; z-index:30; display:none; width:250px; background:#111827; color:#e5e7eb;
+            border:1px solid #374151; border-radius:10px; padding:10px 12px; font-size:11px;
+            box-shadow:0 8px 24px rgba(0,0,0,.55); pointer-events:none; }
+  .cv-tip h4 { margin:0 0 4px; font-size:12px; color:#e5e7eb; }
+  .bar2 { height:5px; background:#1f2937; border-radius:3px; overflow:hidden; margin:4px 0; }
+  .bar2 i { display:block; height:5px; border-radius:3px; }
+  .ok { color:#22c55e } .workc { color:#a78bfa } .queue { color:#93c5fd } .idle { color:#9ca3af } .warn { color:#fca5a5 }
+  .drawer { padding:10px; font-size:11px; color:#cbd5e1; overflow-y:auto; }
+  .drawer .k { color:#6b7280; font-size:10px; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:100; }
+  .modal.on { display:flex; }
+  .modal-card { width:560px; max-height:80vh; overflow:auto; background:#111827; border:1px solid #374151;
+                border-radius:12px; padding:18px 20px; font-size:12px; color:#e5e7eb; }
+  .modal-card pre { background:#0b0f19; border:1px solid #1f2937; border-radius:8px; padding:10px; font-size:11px; overflow-x:auto; }
+  .legend { display:flex; gap:12px; padding:8px 16px; font-size:11px; color:#9ca3af; border-top:1px solid #1f2937; background:#111827; flex-wrap:wrap; }
+  .wchip { position:absolute; background:#150b2e; border:1px solid #a78bfa; color:#c4b5fd; font-size:10px;
+           padding:3px 8px; border-radius:10px; z-index:5; transition:opacity 2s linear, top 2s linear; opacity:0; }
+</style>
+
+<div style="overflow-x:auto;">
+<div class="app">
+  <div class="cap-strip">
+    <span class="cap-pill">🏢 Company · 3 项目 · ⚙ 2 工作中 · ⚡ <span id="capTok">1.24M</span> · <span style="color:#f87171;">🔴 1</span></span>
+    <span class="cap-note">← DSH 界面右上角浮动胶囊 · 点击进入下方全屏画布页 /company</span>
+  </div>
+
+  <div class="bar">
+    <span style="font-weight:700;color:#f59e0b;">🏢 软件公司 · 总监控制台</span>
+    <span>⚡ 总量 <b style="color:#f59e0b;" id="tokTotal">1.24M</b> · 今日 +86k ↑
+      <svg width="70" height="18" style="vertical-align:middle;"><polyline points="2,15 14,12 26,13 38,8 50,9 62,4" fill="none" stroke="#f59e0b" stroke-width="1.5"/></svg></span>
+    <span class="sld">并发上限 <span id="sld2" onclick="setConcurrency(2)">2</span><span id="sld3" class="on" onclick="setConcurrency(3)">3</span><span id="sld4" onclick="setConcurrency(4)">4</span> <span style="color:#6b7280;">(复杂任务默认 2)</span></span>
+    <span id="chips" style="display:contents;">
+      <span class="chip on" data-choice="focus-1" onclick="window.__selectTask('TASK-20260815-001')">TASK-001 待办应用</span>
+      <span class="chip" data-choice="focus-2" onclick="window.__selectTask('TASK-20260815-002')">TASK-002 数据看板</span>
+      <span class="chip" data-choice="focus-3" onclick="window.__selectTask('TASK-20260815-003')">TASK-003 官网 ✅</span>
+    </span>
+    <span class="btn amber" onclick="window.openHire()">＋ 招聘部门</span>
+    <span class="btn" id="bell" onclick="openApprove()">🔔 1 待批准</span>
+  </div>
+
+  <div class="main">
+    <div class="cv" id="cv">
+      <svg id="edges" width="1376" height="560" style="position:absolute;left:0;top:0;">
+        <defs>
+          <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+          <marker id="arwG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22c55e"/></marker>
+        </defs>
+      </svg>
+
+      <div class="nd" id="nd-coord" style="left:430px;top:14px;width:200px;border-color:#f59e0b;background:#1a1408;color:#fbbf24;" onclick="openDept('coord')" onmouseenter="showTip(event,'coord',430,74)" onmouseleave="hideTip()">🎯 总控 Coordinator（总监）<small>常驻 · 派工 / 监督 / 裁决</small></div>
+      <div class="nd" id="nd-planner" style="left:40px;top:154px;width:130px;border-color:#22c55e;background:#0a1f12;color:#86efac;" onclick="openDept('planner')" onmouseenter="showTip(event,'planner',40,220)" onmouseleave="hideTip()">✅ 产品 Planner<small>蓝图已交付</small></div>
+      <div class="nd" id="nd-arch" style="left:230px;top:154px;width:130px;border-color:#22c55e;background:#0a1f12;color:#86efac;" onclick="openDept('arch')" onmouseenter="showTip(event,'arch',230,220)" onmouseleave="hideTip()">✅ 架构 Architect<small>模块划分已交付</small></div>
+      <div class="nd" id="nd-fe" style="left:430px;top:54px;width:130px;border-color:#22c55e;background:#0a1f12;color:#86efac;" onclick="openDept('fe')" onmouseenter="showTip(event,'fe',430,120)" onmouseleave="hideTip()">✅ 前端部<small>页面完成 · 已交接</small></div>
+      <div class="nd work" id="nd-be" style="left:430px;top:154px;width:130px;border-color:#a78bfa;background:#150b2e;color:#c4b5fd;" onclick="openDept('be')" onmouseenter="showTip(event,'be',430,220)" onmouseleave="hideTip()">⚙ 后端部<small>工作中 · 62% · ⚡ <b id="beTok" style="color:#f59e0b;">341.0k</b></small></div>
+      <div class="nd" id="nd-data" style="left:430px;top:254px;width:130px;border-color:#3b82f6;background:#0a1626;color:#93c5fd;" onclick="openDept('data')" onmouseenter="showTip(event,'data',430,320)" onmouseleave="hideTip()">⏸ 数据部<small>排队等并发名额</small></div>
+      <div class="nd" id="nd-inte" style="left:620px;top:154px;width:130px;border-color:#3b82f6;background:#0a1626;color:#93c5fd;" onclick="openDept('inte')" onmouseenter="showTip(event,'inte',620,220)" onmouseleave="hideTip()">⏳ 集成 Integrator<small>等待 3 路交接</small></div>
+      <div class="nd" id="nd-qa" style="left:810px;top:154px;width:130px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('qa')" onmouseenter="showTip(event,'qa',810,220)" onmouseleave="hideTip()">💤 QA 执行<small>空闲</small></div>
+      <div class="nd" id="nd-final" style="left:1000px;top:154px;width:130px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('final')" onmouseenter="showTip(event,'final',1000,220)" onmouseleave="hideTip()">💤 验收负责人<small>空闲 · 仅复杂/高风险</small></div>
+      <div class="nd" id="nd-rel" style="left:1190px;top:154px;width:130px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('rel')" onmouseenter="showTip(event,'rel',1190,220)" onmouseleave="hideTip()">🏁 发布<small>未开始</small></div>
+      <div class="nd" id="nd-repair" style="left:620px;top:304px;width:130px;border-color:#7f1d1d;background:#180909;color:#fca5a5;" onclick="openDept('repair')" onmouseenter="showTip(event,'repair',620,370)" onmouseleave="hideTip()">🔧 修复部 Repair<small>待命 · FAIL 时硬触发</small></div>
+      <div class="nd" id="nd-rec" style="left:1000px;top:304px;width:120px;border-color:#4b5563;background:#111827;color:#9ca3af;" onclick="openDept('rec')" onmouseenter="showTip(event,'rec',1000,370)" onmouseleave="hideTip()">📋 秘书 Recorder<small>代码化 · 自动记录</small></div>
+      <div class="nd adj" id="nd-adj" style="left:720px;top:250px;width:88px;height:52px;line-height:1.5;" onclick="openDecision()" onmouseenter="showTip(event,'adj',700,270)" onmouseleave="hideTip()">⚖ 裁决<br/>14:40</div>
+
+      <div class="cv-tip" id="tip"></div>
+    </div>
+
+    <div class="rail" id="rail">
+      <div id="rail-default">
+        <h4>⑤ 实时事件流 <span style="color:#6b7280;font-weight:400;">（真实事件，2s 增量）</span></h4>
+        <div id="evList">
+          <div class="ev"><b>14:40:12</b> ⚖ 裁决：并发名额冲突 → 数据部排队</div>
+          <div class="ev"><b>14:32:05</b> 集成部 启动（接收前端交接）</div>
+          <div class="ev"><b>14:31:58</b> ✅ 前端 Sprint 验收 PASS（4/4 确定性断言）</div>
+          <div class="ev"><b>14:30:21</b> 📄 交接发出：前端 → 集成《页面与 API 对接说明》</div>
+          <div class="ev"><b>14:27:10</b> 后端部 进度 62%</div>
+          <div class="ev"><b>14:20:44</b> ⏸ 数据部 排队等待并发名额</div>
+          <div class="ev"><b>13:58:02</b> 📄 交接发出：架构 → 前端/后端/数据《接口契约 v2》</div>
+        </div>
+        <h4>④ 交接契约（点击展开）</h4>
+        <div class="doc-row" onclick="openDoc('doc1')">📄 架构 → 3 部门《模块划分与接口契约 v2》<span class="ok">3/3 已签收</span></div>
+        <div class="doc-row" onclick="openDoc('doc2')">📄 前端 → 集成《页面与 API 对接说明》<span class="ok">已签收</span></div>
+        <div class="doc-row" onclick="openDoc('doc3')">📄 数据 → 集成《数据模型说明》<span class="queue">待生成</span></div>
+      </div>
+      <div id="rail-drawer" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span style="color:#86efac;">■</span> 已完成</span>
+    <span><span style="color:#a78bfa;">■</span> 工作中（流光+呼吸）</span>
+    <span><span style="color:#93c5fd;">■</span> 排队/等待</span>
+    <span><span style="color:#9ca3af;">■</span> 空闲</span>
+    <span><span style="color:#fca5a5;">■</span> 卡住/失败</span>
+    <span style="color:#f59e0b;">- - 总监虚线=派工/监督 · ⚖=瞬时裁决节点</span>
+    <span style="color:#ef4444;">- - 红色虚线=失败路由</span>
+    <button class="btn" onclick="resetLayout()">⟲ 自动布局（复位节点）</button>
+    <span style="color:#6b7280;">（真实版本：节点拖动连线跟随 · 数据 2s 拉取 + 前端线性补间数字平滑滚动 · 写入动态来自引擎事件流）</span>
+  </div>
+</div>
+</div>
+
+<div class="modal" id="modal" onclick="if(event.target===this)closeDoc()">
+  <div class="modal-card" id="modal-card"></div>
+</div>
+
+<script src="/company/static/geometry.js"></script>
+<script src="/company/static/canvas.js"></script>
