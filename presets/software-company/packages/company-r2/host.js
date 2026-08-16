@@ -179,6 +179,11 @@ export default {
 
     function taskDirOf(state) { return state.projectDir + '/.company-harness/tasks/' + state.taskId }
     function sprintDirOf(state, sprintId) { return taskDirOf(state) + '/sprints/' + sprintId }
+    function eventsFileFor(state) {
+      const base = state && state.projectDir ? state.projectDir : process.cwd()
+      return createEventsFile(base + '/.company-harness/events')
+    }
+    function contractsDirOf(state) { return taskDirOf(state) + '/contracts' }
 
     async function registryFilePath() { return (await defaultProjectDir()) + '/.company-harness/registry.json' }
     async function loadRegistry() {
@@ -276,6 +281,14 @@ export default {
       if (to === 'PAUSED') state.pausedFrom = from
       if (from === 'REPLANNING' && to === 'SPRINT_DRAFTING') state.replans = (state.replans || 0) + 1
       await saveState(state)
+      try {
+        appendEvent(eventsFileFor(state), { type: 'status', taskId: state.taskId, from, to, reason })
+      } catch (e) {}
+      if (to === 'SPRINT_PASSED') {
+        try {
+          appendEvent(eventsFileFor(state), { type: 'review.pass', taskId: state.taskId, badges: assertionBadges(await deterministicBadgesFrom(state)) })
+        } catch (e) {}
+      }
       return state
     }
 
@@ -604,7 +617,7 @@ export default {
         }
       } catch (e) {}
     }
-    ctx.on('subagent/start', function (info) { pushAgentLog('start', info) })
+    ctx.on('subagent/start', function (info) { pushAgentLog('start', info); try { recordDispatch({ sessionId: info && info.id, at: now() }) } catch (e) {} })
     ctx.on('subagent/end', function (info) { pushAgentLog('end', info); enrichAgentLog() })
     ctx.interval(function () { enrichAgentLog() }, 120000)
 
@@ -768,7 +781,11 @@ export default {
             else if (p === '/company-api/task') out = await taskDetail(q.get('taskId'))
             else if (p === '/company-api/tokens') out = await tokensSnapshot()
             else if (p === '/company-api/agents') out = { entries: agentLog.slice(-80), total: agentLog.length }
-            else if (p === '/company-api/action') out = await handleAction(q.get('taskId'), q.get('action'))
+            else if (p === '/company-api/events') out = await eventsSnapshot(q)
+            else if (p === '/company-api/flow') out = await flowSnapshot(q)
+            else if (p === '/company-api/contract') out = await contractSnapshot(q)
+            else if (p === '/company-api/canvas') out = await canvasSnapshot()
+            else if (p === '/company-api/action') out = await handleAction(q.get('taskId'), q.get('action'), q)
             else { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return }
             res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
             res.end(JSON.stringify(sanitize(out)))
@@ -781,6 +798,110 @@ export default {
       } catch (e) {
         // 路由已由同 preset 的其他会话实例注册：复用既有路由（数据为文件态）
       }
+    }
+
+    function ensureDir(dir) { try { nodeFs.mkdirSync(dir, { recursive: true }) } catch (e) {} }
+    function renameDir(a, b) { nodeFs.renameSync(a, b) }
+
+    async function deterministicBadgesFrom(state) {
+      const out = {}
+      try {
+        const sid = state.currentSprint || (state.sprints && state.sprints.length ? state.sprints[state.sprints.length - 1].id : 'S01')
+        const evidence = await readTextAt(sprintDirOf(state, sid) + '/QA_EVIDENCE.md')
+        if (evidence) {
+          out.tests = /测试[:：]\s*([0-9]+\/[0-9]+)/.exec(evidence)?.[1] || undefined
+          out.lint = /lint/i.test(evidence)
+          out.coverage = /覆盖率[:：]\s*([0-9.]+%?)/.exec(evidence)?.[1] || undefined
+          out.build = /构建/.test(evidence)
+        }
+      } catch (e) {}
+      return out
+    }
+
+    function explorationFileFor(hash) {
+      const dir = process.cwd() + '/.company-harness/explorations'
+      ensureDir(dir)
+      return dir + '/' + hash + '.json'
+    }
+
+    const CONCURRENCY = { limit: 3 }
+    function setConcurrencyLimit(n) {
+      CONCURRENCY.limit = n
+      appendEvent(createEventsFile(process.cwd() + '/.company-harness/events'), { type: 'concurrency.changed', limit: n })
+      return n
+    }
+    function activeAgents() {
+      return agentLog.filter((e) => e.kind === 'start').length - agentLog.filter((e) => e.kind === 'end').length
+    }
+
+    async function issueContract(state, from, to, detail) {
+      const c = buildContract({ from, to, ...detail })
+      const errs = validateContract(c)
+      if (errs.length) throw new Error('契约非法: ' + errs.join('; '))
+      ensureDir(contractsDirOf(state))
+      const file = contractsDirOf(state) + '/' + from + '__' + to + '.md'
+      await writeTextAt(file, renderContractMarkdown(c))
+      appendEvent(eventsFileFor(state), { type: 'handoff.issued', taskId: state.taskId, from, to, file })
+      return { file, contract: c }
+    }
+
+    async function signContractFor(state, from, to, by) {
+      const file = contractsDirOf(state) + '/' + from + '__' + to + '.md'
+      const text = await readTextAt(file)
+      if (text === undefined) return { ok: false, error: '契约不存在: ' + file }
+      const signed = signContract({ from, to }, by, now())
+      await writeTextAt(file, renderContractMarkdown(signed))
+      appendEvent(eventsFileFor(state), { type: 'handoff.signed', taskId: state.taskId, from, to, by })
+      return { ok: true }
+    }
+
+    async function eventsSnapshot(q) {
+      const file = createEventsFile(process.cwd() + '/.company-harness/events')
+      const afterSeq = Number(q.get('seq') || 0)
+      const events = readSince(file, afterSeq)
+      return { events, nextSeq: events.length ? events[events.length - 1].seq : afterSeq }
+    }
+
+    async function flowSnapshot(q) {
+      const state = await loadTask(q.get('taskId'))
+      if (!state) return { error: '任务不存在' }
+      if (!state.flow) return { legacy: true, stages: STAGES_LEGACY, current: state.status }
+      const done = state.flow.done || {}
+      return {
+        legacy: false, nodes: state.flow.nodes, adjustments: state.flow.adjustments,
+        done, ready: readyNodes(state.flow, new Set(Object.keys(done))),
+        current: state.status,
+      }
+    }
+
+    async function contractSnapshot(q) {
+      const state = await loadTask(q.get('taskId'))
+      if (!state) return { error: '任务不存在' }
+      const file = contractsDirOf(state) + '/' + q.get('from') + '__' + q.get('to') + '.md'
+      const markdown = await readTextAt(file)
+      return markdown === undefined ? { error: '契约不存在' } : { markdown }
+    }
+
+    async function canvasSnapshot() {
+      const tokens = await tokensSnapshot().catch(function () { return { rows: [] } })
+      const dispatches = await listDispatchRecords()
+      const attributed = attributeUsage(tokens.rows || [], dispatches)
+      const depts = aggregateByDepartment(attributed)
+      const tasks = await listAllTasks()
+      return {
+        tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
+        depts, totalTokens: (tokens.rows || []).reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        concurrency: CONCURRENCY.limit || 3,
+        at: now(),
+      }
+    }
+
+    const DISPATCH_FILE = process.cwd() + '/.company-harness/dispatches.jsonl'
+    function recordDispatch(d) { appendEvent(DISPATCH_FILE, d) }
+    async function listDispatchRecords() {
+      const text = await readTextAt(DISPATCH_FILE)
+      if (!text) return []
+      return text.split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l) } catch (e) { return null } }).filter(Boolean)
     }
 
     async function taskDetail(taskId) {
@@ -799,7 +920,61 @@ export default {
       }
     }
 
-    async function handleAction(taskId, action) {
+    async function handleAction(taskId, action, q) {
+      // 无任务上下文的总监操作（先于 loadTask）
+      if (action === 'concurrency') {
+        const n = Number((q && q.get('n')) || 0)
+        if (![2, 3, 4].includes(n)) return { ok: false, error: 'n 必须 2/3/4' }
+        return { ok: true, limit: setConcurrencyLimit(n) }
+      }
+      if (action === 'hire' || action === 'upgradeDept' || action === 'undoHire') {
+        const deptRoot = new URL('../../../../.agent-presets/', import.meta.url).pathname
+        const evFile = createEventsFile(process.cwd() + '/.company-harness/events')
+        if (action === 'hire') {
+          const req = JSON.parse((q && q.get('req')) || 'null')
+          if (!req) return { ok: false, error: 'req 必填' }
+          const errs = validateHire(req)
+          if (errs.length) return { ok: false, error: errs.join('; ') }
+          const dir = deptRoot + 'company-dept-' + req.id
+          ensureDir(dir)
+          nodeFs.writeFileSync(dir + '/agent.cordis.yml', renderDeptPresetYml(req))
+          nodeFs.writeFileSync(dir + '/preset.yml', 'name: company-dept-' + req.id + '\n')
+          const roles = JSON.parse(nodeFs.readFileSync(ROLES_FILE, 'utf8'))
+          try {
+            const merged = mergeRole(roles.roles, { id: req.id, title: req.title, model: req.model, reasoning: req.reasoning, source: 'hired' })
+            nodeFs.writeFileSync(ROLES_FILE, JSON.stringify({ specSection: roles.specSection, count: merged.length, note: roles.note, roles: merged }, null, 2))
+          } catch (e) { return { ok: false, error: String(e.message || e) } }
+          loadRoles()
+          appendEvent(evFile, { type: 'dept.hired', dept: req.id, dir })
+          return { ok: true, dir, role: req.id }
+        }
+        if (action === 'upgradeDept') {
+          const req = JSON.parse((q && q.get('req')) || 'null')
+          if (!req || !DEPT_ID_RE.test(req.id || '')) return { ok: false, error: 'req.id 非法' }
+          const dir = deptRoot + 'company-dept-' + req.id
+          nodeFs.writeFileSync(dir + '/agent.cordis.yml', renderDeptPresetYml(req))
+          const roles = JSON.parse(nodeFs.readFileSync(ROLES_FILE, 'utf8'))
+          const merged = roles.roles.map(function (r) {
+            if (r.id === req.id) return { ...r, title: req.title, model: req.model, reasoning: req.reasoning }
+            return r
+          })
+          nodeFs.writeFileSync(ROLES_FILE, JSON.stringify({ specSection: roles.specSection, count: merged.length, note: roles.note, roles: merged }, null, 2))
+          loadRoles()
+          appendEvent(evFile, { type: 'dept.upgraded', dept: req.id })
+          return { ok: true }
+        }
+        const id = q.get('id')
+        if (!DEPT_ID_RE.test(id || '')) return { ok: false, error: 'id 非法' }
+        const roles = JSON.parse(nodeFs.readFileSync(ROLES_FILE, 'utf8'))
+        try {
+          const merged = undoRole(roles.roles, id)
+          nodeFs.writeFileSync(ROLES_FILE, JSON.stringify({ specSection: roles.specSection, count: merged.length, note: roles.note, roles: merged }, null, 2))
+        } catch (e) { return { ok: false, error: String(e.message || e) } }
+        try { renameDir(deptRoot + 'company-dept-' + id, deptRoot + '.archived-company-dept-' + id) } catch (e) {}
+        loadRoles()
+        appendEvent(evFile, { type: 'dept.undone', dept: id })
+        return { ok: true }
+      }
       const state = await loadTask(taskId)
       if (!state) return { ok: false, error: '任务不存在' }
       if (action === 'approve') {
@@ -836,6 +1011,27 @@ export default {
         if (TERMINAL_STATES.indexOf(state.status) >= 0) return { ok: false, error: '已终态' }
         await transition(state, 'TERMINATED', '用户通过 UI 终止：面板操作', [taskDirOf(state) + '/RUN_STATE.json'])
         return { ok: true, status: state.status }
+      }
+      if (action === 'adjustFlow') {
+        if (!state.flow) return { ok: false, error: '旧任务无 DAG 流程' }
+        const op = JSON.parse((q && q.get('op')) || 'null')
+        try {
+          const { flow } = adjustFlow(state.flow, op)
+          state.flow = flow
+          await saveState(state)
+          appendEvent(eventsFileFor(state), { type: 'flow.adjusted', taskId: state.taskId, op })
+          return { ok: true, nodes: state.flow.nodes }
+        } catch (e) { return { ok: false, error: String(e.message || e) } }
+      }
+      if (action === 'signContract') {
+        const from = q.get('from'), to = q.get('to'), by = q.get('by') || 'user'
+        if (!from || !to) return { ok: false, error: 'from/to 必填' }
+        return await signContractFor(state, from, to, by)
+      }
+      if (action === 'decide') {
+        const opt = q.get('opt')
+        appendEvent(eventsFileFor(state), { type: 'adjudication.decided', taskId: state.taskId, decision: opt, by: 'director-ui' })
+        return { ok: true, decision: opt }
       }
       return { ok: false, error: '未知操作' }
     }
@@ -893,6 +1089,12 @@ export default {
         },
         sprints: [], currentSprint: null,
         replans: 0, finalRepairs: 0, repairPhase: null,
+        flow: {
+          template: type,
+          nodes: (FLOW_TEMPLATES[type] || FLOW_TEMPLATES.small).nodes,
+          adjustments: [],
+          done: {},
+        },
         approvals: [], history: [], rolesLaunched: [], ownershipConflicts: [],
       }
       const td = taskDirOf(state)
@@ -1341,5 +1543,83 @@ export default {
       await appendTextAt(taskDirOf(state) + '/FINAL_ACCEPTANCE.md', '\n## 项目收据（' + now() + '）\n\n```text\n' + receipt + '\n```\n')
       return { ok: true, taskId: state.taskId, receipt }
     })
+
+    tool('company_adjust_flow', '调整当前任务的 DAG 流程模板（insert 插环节 / addParallel 加并行分支 / skip 跳环节），调整写进 RUN_STATE.flow.adjustments 并留痕。op 示例：{"op":"insert","after":"build","node":{"id":"lint","dept":"qa-runner","title":"Lint 门禁"}}', {
+      taskId: S('任务编号'),
+      op: { type: 'object', additionalProperties: true, description: '调整操作' },
+    }, ['taskId', 'op'], async function (args) {
+      const state = await loadTask(args.taskId)
+      if (!state) return { ok: false, error: '任务不存在' }
+      if (!state.flow) return { ok: false, error: '旧任务无 DAG 流程' }
+      try {
+        const { flow } = adjustFlow(state.flow, args.op)
+        state.flow = flow
+        await saveState(state)
+        appendEvent(eventsFileFor(state), { type: 'flow.adjusted', taskId: state.taskId, op: args.op, by: 'agent' })
+        return { ok: true, nodes: state.flow.nodes }
+      } catch (e) { return { ok: false, error: String(e.message || e) } }
+    })
+
+    tool('company_run_sprint', '复合驱动（五刀①进阶项）：一个回合内按 DAG 就绪关系生成本 Sprint 的全部派工计划（含每个环节的角色、注入的契约切片路径与派工提示词），并推进状态登记。实际子代理派工由 Coordinator 按计划用 subagent 工具执行（可多路并行，遵守并发上限）。裁决点不在此工具内。', {
+      taskId: S('任务编号'),
+    }, ['taskId'], async function (args) {
+      const state = await loadTask(args.taskId)
+      if (!state) return { ok: false, error: '任务不存在' }
+      if (!state.flow) return { ok: false, error: '旧任务无 DAG 流程' }
+      const done = new Set(Object.keys(state.flow.done || {}))
+      const plan = []
+      let changed = false
+      for (let guard = 0; guard < state.flow.nodes.length + 2; guard += 1) {
+        const ready = readyNodes(state.flow, done)
+        if (ready.length === 0) break
+        const nodeId = ready[0]
+        const node = state.flow.nodes.find((n) => n.id === nodeId)
+        if (!node) break
+        const dept = ROLES[node.dept] || { title: node.dept, model: 'deepseek-v4-flash', reasoning: 'high' }
+        const contractSlices = (state.flow.nodes || [])
+          .filter((n) => (node.needs || []).includes(n.id))
+          .map((n) => contractsDirOf(state) + '/' + n.id + '__' + node.id + '.md')
+        plan.push({
+          stage: nodeId, dept: node.dept, title: node.title,
+          model: dept.model, reasoning: dept.reasoning,
+          prompt: '你是「' + (dept.title || node.dept) + '」，执行环节「' + (node.title || node.id) + '」（任务 ' + state.taskId + '）。只读注入：部门档案、交接契约切片 ' + contractSlices.join('、') + '。完成后用 company_record_evidence/company_verdict 等既有工具回报。',
+          contractSlices,
+        })
+        done.add(nodeId)
+        changed = true
+      }
+      if (!changed) return { ok: true, plan: [], note: '本 Sprint 全部环节已就绪完毕或已完成' }
+      appendEvent(eventsFileFor(state), { type: 'sprint.plan', taskId: state.taskId, stages: plan.map((p) => p.stage) })
+      return { ok: true, plan, note: '按顺序派工；可并行的环节用 run_in_background 同时派，遵守并发上限（复杂/高风险 2，其他 3）。' }
+    })
+
+    tool('company_hire_department', '招聘新部门：创建 company-dept-<id> preset 并注册进角色库。id=[a-z0-9-]{2,32}；model=deepseek-v4-pro|deepseek-v4-flash；reasoning=low|medium|high；tools 可选 bash/fs/search/jobs/subagent/web/ask/todo。新部门无 company_* 引擎工具（护栏）。', {
+      id: S('部门 id'), title: S('部门名'), persona: S('职责人设'), model: SE('模型', ['deepseek-v4-pro', 'deepseek-v4-flash']), reasoning: SE('reasoning', ['low', 'medium', 'high']), tools: SA('工具集'),
+    }, ['id', 'title', 'persona', 'model', 'reasoning'], async function (args) {
+      const errs = validateHire(args)
+      if (errs.length) return { ok: false, error: errs.join('; ') }
+      return await handleAction('', 'hire', new URLSearchParams({ req: JSON.stringify(args) }))
+    })
+
+    tool('company_upgrade_department', '改造部门的人设/模型/reasoning/工具集（写回该部门 preset，只影响下次派工）。', {
+      id: S('部门 id'), title: S('部门名'), persona: S('职责人设'), model: SE('模型', ['deepseek-v4-pro', 'deepseek-v4-flash']), reasoning: SE('reasoning', ['low', 'medium', 'high']), tools: SA('工具集'),
+    }, ['id'], async function (args) {
+      const errs = validateHire({ ...args, tools: args.tools || [] })
+      if (errs.length) return { ok: false, error: errs.join('; ') }
+      return await handleAction('', 'upgradeDept', new URLSearchParams({ req: JSON.stringify(args) }))
+    })
+
+    // 裁决（瞬时 max）：v1 采用降级路径——发事件 + 返回裁决指引，由 Coordinator
+    // 在下一回合用 subagent 工具以 max reasoning 执行裁决，结果经 company_decide 写回。
+    // host 直派需要 live parent Agent（subagents.start 契约），作为 P3 增强项。
+    async function adjudicate(state, question, options) {
+      appendEvent(eventsFileFor(state), { type: 'adjudication.started', taskId: state.taskId, question })
+      return {
+        ok: true,
+        mode: 'delegated',
+        guidance: '请在下一回合用 subagent 工具派一个裁决子代理（model=deepseek-v4-pro，reasoning=max，角色=coordinator），问题：' + question + '；候选方案：' + JSON.stringify(options) + '；只输出一个方案 id 与一句话依据。裁决后用 company_decide 写回。',
+        question, options,
+      }
+    }
   },
 }
