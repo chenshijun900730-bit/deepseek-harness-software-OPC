@@ -990,9 +990,24 @@ export default {
       }
       const dispatchDepts = {}
       for (const [k, v] of activeByTask) dispatchDepts[k] = [...v]
+      // 组织视图数据：部门全名单（底卡）与每次调用明细（每次调用画布上叠加一张调用卡）
+      const roles = Object.values(ROLES).map(function (r) { return { id: r.id, title: r.title, model: r.model, reasoning: r.reasoning } })
+      const tokenById = new Map((tokens.rows || []).map(function (r) { return [r.id, r] }))
+      const callList = []
+      for (const d of dispatches) {
+        if (!d.department || !d.sessionId) continue
+        const row = tokenById.get(d.sessionId)
+        callList.push({
+          dept: d.department, taskId: d.taskId || null, at: d.at || d.ts || null,
+          model: row && row.model ? row.model : '',
+          modelProvider: row && row.modelProvider ? row.modelProvider : '',
+          tokens: row ? (row.totalTokens || 0) : 0,
+        })
+      }
+      callList.sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')) })
       return {
         tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
-        depts, dispatchDepts,
+        depts, dispatchDepts, roles, dispatches: callList.slice(-60),
         // 总量只算本项目派工记录归属的 token（与画布部门徽标同口径，跨项目会话不计入）
         totalTokens: attributed.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
         concurrency: CONCURRENCY.limit || 3,

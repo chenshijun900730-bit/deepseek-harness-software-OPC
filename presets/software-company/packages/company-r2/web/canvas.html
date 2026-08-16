@@ -56,6 +56,10 @@
   .legend { display:flex; gap:12px; padding:8px 16px; font-size:11px; color:#9ca3af; border-top:1px solid #1f2937; background:#111827; flex-wrap:wrap; }
   .wchip { position:absolute; background:#150b2e; border:1px solid #a78bfa; color:#c4b5fd; font-size:10px;
            padding:3px 8px; border-radius:10px; z-index:5; transition:opacity 2s linear, top 2s linear; opacity:0; }
+  .call { position:absolute; z-index:4; background:#0e2233; border:1px solid #3b82f6; color:#bfdbfe; border-radius:6px;
+          padding:3px 6px; font-size:9.5px; line-height:1.35; box-shadow:0 2px 8px rgba(0,0,0,.45); pointer-events:none; }
+  .call b { color:#7dd3fc; font-weight:600; }
+  .call span { color:#94a3b8; font-size:9px; }
 </style>
 
 <div style="overflow-x:auto;">
@@ -71,6 +75,7 @@
       <svg width="70" height="18" style="vertical-align:middle;"><polyline points="2,15 14,12 26,13 38,8 50,9 62,4" fill="none" stroke="#f59e0b" stroke-width="1.5"/></svg></span>
     <span class="sld">并发上限 <span id="sld2" onclick="setConcurrency(2)">2</span><span id="sld3" class="on" onclick="setConcurrency(3)">3</span><span id="sld4" onclick="setConcurrency(4)">4</span> <span style="color:#6b7280;">(复杂任务默认 2)</span></span>
     <span id="chips" style="display:contents;"></span>
+    <span class="sld">视图 <span id="vOrg" class="on" onclick="window.__setView('org')">🏢 组织</span><span id="vFlow" onclick="window.__setView('flow')">🔀 流程</span></span>
     <span class="btn amber" onclick="window.openHire()">＋ 招聘部门</span>
     <span class="btn" id="bell" onclick="openApprove()">🔔 1 待批准</span>
   </div>
@@ -85,7 +90,7 @@
       </svg>
 
       <div class="nd" id="nd-coord" style="left:430px;top:14px;width:200px;border-color:#f59e0b;background:#1a1408;color:#fbbf24;" onclick="window.__openCoord()">🎯 总控 Coordinator（总监）<small>常驻 · 派工 / 监督 / 裁决</small></div>
-      <div id="nd-placeholder" style="position:absolute;left:230px;top:200px;color:#6b7280;font-size:12px;">← 顶部选择一个项目 chip，画布将实时绘制该项目的串并联流转图（拖动节点、悬停信息卡、📄 交接契约都在这里）</div>
+      <div id="nd-placeholder" style="position:absolute;left:230px;top:200px;color:#6b7280;font-size:12px;">🏢 组织视图：公司 14 个职能部门全量连线；每调用一次某部门，就在其底卡上方叠加一张调用卡。顶部 chip 选择任务，点部门看调用记录。</div>
 
       <div class="cv-tip" id="tip"></div>
     </div>
@@ -104,15 +109,13 @@
   </div>
 
   <div class="legend">
+    <span><span style="color:#7dd3fc;">▤</span> 部门底卡（14 个职能部门全量连线）</span>
+    <span><span style="color:#3b82f6;">▤</span> 调用卡：每调用一次该部门就叠加一张（时间 · 任务 · 模型 · token）</span>
     <span><span style="color:#86efac;">■</span> 已完成</span>
     <span><span style="color:#a78bfa;">■</span> 工作中（流光+呼吸）</span>
-    <span><span style="color:#93c5fd;">■</span> 排队/等待</span>
-    <span><span style="color:#9ca3af;">■</span> 空闲</span>
-    <span><span style="color:#fca5a5;">■</span> 卡住/失败</span>
     <span style="color:#f59e0b;">- - 总监虚线=派工/监督 · ⚖=瞬时裁决节点</span>
-    <span style="color:#ef4444;">- - 红色虚线=失败路由</span>
-    <button class="btn" onclick="resetLayout()">⟲ 自动布局（复位节点）</button>
-    <span style="color:#6b7280;">（真实版本：节点拖动连线跟随 · 数据 2s 拉取 + 前端线性补间数字平滑滚动 · 写入动态来自引擎事件流）</span>
+    <button class="btn" onclick="resetLayout()">⟲ 复位</button>
+    <span style="color:#6b7280;">（组织视图：点部门看调用记录抽屉；流程视图：🔀 切换看环节 DAG）</span>
   </div>
 </div>
 </div>

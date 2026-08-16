@@ -3,7 +3,7 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
+  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
@@ -42,6 +42,8 @@
   function renderNodes(flow) {
     if (!cv) return
     cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
+    cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
+    var coord = $('nd-coord'); if (coord) coord.style.display = ''
     var ph = $('nd-placeholder'); if (ph) ph.remove()
     if (!flow) return
     var nodes = flow.nodes.filter(function (n) { return !n.skipped })
@@ -191,13 +193,152 @@
     })
   }
 
+  // ================= 组织视图：14 部门底卡全量连线 + 每次调用叠加调用卡 =================
+  var ORG = [
+    { id: 'coordinator', x: 613, y: 22, w: 150 },
+    { id: 'planner', x: 140, y: 150, w: 150, chain: 'explorer' },
+    { id: 'explorer', x: 140, y: 280, w: 150, chain: 'architect' },
+    { id: 'architect', x: 140, y: 410, w: 150 },
+    { id: 'generator', x: 430, y: 150, w: 150, chain: 'department-generator' },
+    { id: 'department-generator', x: 430, y: 280, w: 150, chain: 'integrator' },
+    { id: 'integrator', x: 430, y: 410, w: 150 },
+    { id: 'qa-runner', x: 720, y: 150, w: 150, chain: 'sprint-evaluator' },
+    { id: 'sprint-evaluator', x: 720, y: 280, w: 150, chain: 'final-evaluator' },
+    { id: 'final-evaluator', x: 720, y: 410, w: 150 },
+    { id: 'security-reviewer', x: 1010, y: 120, w: 170, chain: 'mechanical-worker' },
+    { id: 'mechanical-worker', x: 1010, y: 230, w: 170, chain: 'recorder' },
+    { id: 'recorder', x: 1010, y: 340, w: 170, chain: 'repair-generator' },
+    { id: 'repair-generator', x: 1010, y: 450, w: 170 },
+  ]
+  function roleOf(id) {
+    for (var i = 0; i < (STATE.roles || []).length; i++) if (STATE.roles[i].id === id) return STATE.roles[i]
+    return { id: id, title: id, model: '?', reasoning: '?' }
+  }
+  function deptCalls(id) {
+    return (STATE.dispatches || []).filter(function (d) { return d.dept === id && (!STATE.focusTask || d.taskId === STATE.focusTask) })
+  }
+  function renderOrg() {
+    if (!cv) return
+    cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
+    cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
+    var coord = $('nd-coord'); if (coord) coord.style.display = 'none'
+    var ph = $('nd-placeholder'); if (ph) ph.remove()
+    var names = {}
+    ;(STATE.roles || []).forEach(function (r) { names[r.id] = r })
+    var nodes = ORG.filter(function (o) { return true })
+    nodes.forEach(function (o) {
+      var r = roleOf(o.id)
+      var calls = deptCalls(o.id)
+      var d = STATE.depts[o.id] || {}
+      var st = o.id === 'coordinator' ? 'working' : (calls.length ? 'working' : 'idle')
+      var s = STATUS_STYLE[st]
+      var el = document.createElement('div')
+      el.className = 'nd' + (st === 'working' ? ' work' : '')
+      el.id = 'nd-dept-' + o.id
+      el.style.cssText = 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w + 'px;border-color:' + s.border + ';background:' + s.bg + ';color:' + s.color
+      var toks = d.totalTokens ? ' · ⚡ ' + fmt(d.totalTokens) : ''
+      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + toks + '</small>'
+      el.addEventListener('click', function () { openOrgDept(o.id) })
+      el.addEventListener('mouseenter', function (ev) {
+        showTip(ev, '<h4>🏢 ' + (r.title || o.id) + '</h4><div style="color:#9ca3af;">模型：' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
+          '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) + '<br/>点击查看调用记录</div>', el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
+      })
+      el.addEventListener('mouseleave', window.hideTip)
+      cv.appendChild(el)
+    })
+    renderOrgEdges()
+    renderCallCards()
+  }
+  function renderOrgEdges() {
+    var svg = $('edges')
+    if (!svg) return
+    svg.querySelectorAll('.edge,.docicon,.orge').forEach(function (el) { el.remove() })
+    var pos = {}
+    ORG.forEach(function (o) {
+      var el = $('nd-dept-' + o.id)
+      if (el) pos[o.id] = { x: el.offsetLeft + el.offsetWidth / 2, top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight }
+    })
+    function line(a, b, dash, color) {
+      if (!pos[a] || !pos[b]) return
+      var y1 = a === 'coordinator' ? pos[a].bottom : pos[a].bottom
+      var y2 = pos[b].top
+      var p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      p.setAttribute('class', 'orge')
+      p.setAttribute('d', 'M' + pos[a].x + ',' + y1 + ' C' + pos[a].x + ',' + ((y1 + y2) / 2) + ' ' + pos[b].x + ',' + ((y1 + y2) / 2) + ' ' + pos[b].x + ',' + y2)
+      p.setAttribute('stroke', color || '#64748b')
+      p.setAttribute('stroke-width', '1.5')
+      p.setAttribute('fill', 'none')
+      if (dash) p.setAttribute('stroke-dasharray', '5 4')
+      svg.appendChild(p)
+    }
+    ;['planner', 'generator', 'qa-runner', 'security-reviewer'].forEach(function (id) { line('coordinator', id, true, '#f59e0b') })
+    ORG.forEach(function (o) { if (o.chain) line(o.id, o.chain) })
+    line('architect', 'generator')
+    line('integrator', 'qa-runner')
+    line('sprint-evaluator', 'security-reviewer')
+  }
+  function renderCallCards() {
+    cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
+    var fid = STATE.focusTask
+    var byDept = {}
+    ;(STATE.dispatches || []).forEach(function (d) {
+      if (fid && d.taskId !== fid) return
+      ;(byDept[d.dept] = byDept[d.dept] || []).push(d)
+    })
+    Object.keys(byDept).forEach(function (dept) {
+      var base = $('nd-dept-' + dept)
+      if (!base) return
+      var list = byDept[dept]
+      var shown = list.slice(-6)
+      var overflow = list.length - shown.length
+      shown.forEach(function (d, i) {
+        var card = document.createElement('div')
+        card.className = 'call'
+        card.style.cssText = 'left:' + (base.offsetLeft + 4) + 'px;top:' + (base.offsetTop - 18 - i * 16) + 'px;width:' + (base.offsetWidth - 8) + 'px;'
+        var task = d.taskId ? d.taskId.replace('TASK-', 'T').replace(/-\d{8}-/, '-') : '?'
+        var model = d.model ? d.model.replace('deepseek-v4-', '') : '?'
+        card.innerHTML = '<b>' + String(d.at || '').slice(11, 16) + '</b> ' + task + '<br/><span>' + model + ' · ⚡' + fmt(d.tokens || 0) + '</span>'
+        cv.appendChild(card)
+      })
+      if (overflow > 0) {
+        var more = document.createElement('div')
+        more.className = 'call'
+        more.style.cssText = 'left:' + (base.offsetLeft + 4) + 'px;top:' + (base.offsetTop - 18 - shown.length * 16) + 'px;width:' + (base.offsetWidth - 8) + 'px;'
+        more.innerHTML = '<b>+' + overflow + '</b> 更早调用…'
+        cv.appendChild(more)
+      }
+    })
+  }
+  function openOrgDept(id) {
+    var r = roleOf(id)
+    var d = STATE.depts[id] || {}
+    var calls = deptCalls(id)
+    fillPanel('<div style="font-weight:700;color:#7dd3fc;padding:6px 10px;">部门抽屉：' + (r.title || id) + '</div>' +
+      '<div class="drawer"><div class="k">模型</div>' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
+      '<div class="k" style="margin-top:6px;">token</div>累计 ' + fmt(d.totalTokens || 0) + ' · 排名 ' + (d.rank || '-') +
+      '<div class="k" style="margin-top:6px;">调用记录（' + (STATE.focusTask ? '聚焦任务 ' : '全部') + calls.length + ' 次）</div>' +
+      (calls.length ? calls.slice(-10).reverse().map(function (c) {
+        return '<div style="padding:3px 0;border-bottom:1px solid #141a26;">' + String(c.at || '').slice(11, 19) + ' · ' + (c.taskId || '?') + ' · ' + (c.model || '?') + ' · ⚡' + fmt(c.tokens || 0) + '</div>'
+      }).join('') : '<div style="color:#6b7280;">暂无调用记录</div>') +
+      '</div><div class="btn" style="margin:8px 10px;" onclick="window.__closePanel()">✕ 关闭</div>')
+  }
+  window.__setView = function (v) {
+    STATE.view = v === 'flow' ? 'flow' : 'org'
+    var o = $('vOrg'), f = $('vFlow')
+    if (o) o.className = STATE.view === 'org' ? 'on' : ''
+    if (f) f.className = STATE.view === 'flow' ? 'on' : ''
+    poll()
+  }
+  function renderCurrent() {
+    if (STATE.view === 'flow') { if (STATE.flow) renderNodes(STATE.flow) } else { renderOrg() }
+  }
+
   function startDrag(e) {
     e.preventDefault()
     DRAG = { el: e.currentTarget, dx: e.clientX - e.currentTarget.offsetLeft, dy: e.clientY - e.currentTarget.offsetTop, moved: false }
     document.addEventListener('mousemove', onDrag)
     document.addEventListener('mouseup', endDrag)
-  }
-  function onDrag(e) {
+  }  function onDrag(e) {
     if (!DRAG) return
     DRAG.moved = true
     var r = cv.getBoundingClientRect()
@@ -273,8 +414,8 @@
         // 只把属于当前聚焦任务的环节事件应用到画布（多任务共存时防止串台）；
         // 切换任务时 flow 接口会回填该任务的权威 done/started，跳过的实时事件不丢状态。
         if (ev.taskId && ev.taskId !== STATE.focusTask) return
-        if (ev.type === 'stage.started') { STATE.workingStage = ev.stage; STATE.started.add(ev.stage); if (STATE.flow) renderNodes(STATE.flow) }
-        if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; STATE.started.delete(ev.stage); if (STATE.flow) renderNodes(STATE.flow) }
+        if (ev.type === 'stage.started') { STATE.workingStage = ev.stage; STATE.started.add(ev.stage); renderCurrent() }
+        if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; STATE.started.delete(ev.stage); renderCurrent() }
         if (ev.type === 'adjudication.started') showAdjNode(ev)
         if (ev.type === 'adjudication.decided') { var a = $('nd-adj'); if (a) a.remove() }
       })
@@ -283,6 +424,8 @@
       STATE.tasks = d.tasks || []
       STATE.depts = d.depts || {}
       STATE.dispatchDepts = d.dispatchDepts || {}
+      STATE.roles = d.roles || []
+      STATE.dispatches = d.dispatches || []
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
       tickTokens()
@@ -291,7 +434,7 @@
       // 由 flow 回填兜底（done/started 均已持久化在 RUN_STATE）。
       var fid = STATE.focusTask || (STATE.tasks[0] && STATE.tasks[0].taskId)
       STATE.focusTask = fid
-      if (fid) {
+      if (STATE.view === 'flow' && fid) {
         api('/company-api/flow?taskId=' + encodeURIComponent(fid)).then(function (f) {
           if (f.legacy) { STATE.flow = null; renderNodes(null); return }
           STATE.flow = f
@@ -302,13 +445,15 @@
           if (STATE.workingStage && STATE.started.has(STATE.workingStage) === false) STATE.workingStage = null
           renderNodes(f)
         }).catch(function () {})
+      } else {
+        renderOrg()
       }
     }).catch(function () {})
   }
 
   window.__selectTask = function (id) { STATE.focusTask = id; renderChips(); poll() }
 
-  window.resetLayout = function () { if (STATE.flow) renderNodes(STATE.flow) }
+  window.resetLayout = function () { renderCurrent() }
 
   window.__openCoord = function () {
     fillPanel('<div style="font-weight:700;color:#fbbf24;padding:6px 10px;">🎯 总控 Coordinator（总监）</div>' +
