@@ -35,6 +35,7 @@
     if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
     return String(n)
   }
+  function fmtFull(n) { return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
   function nowLabel() {
     const d = new Date()
     return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0')
@@ -389,7 +390,7 @@
       if (root.model) headLine.appendChild(el('span', { color: '#7dd3fc' }, ' · ' + root.model + (root.modelProvider ? '（' + root.modelProvider + '）' : '')))
       card.appendChild(headLine)
       const big = el('div', { display: 'flex', alignItems: 'baseline', gap: '8px' })
-      big.appendChild(el('span', { fontSize: '26px', fontWeight: '800', color: '#f59e0b' }, fmt(root.totalTokens)))
+      big.appendChild(el('span', { fontSize: '26px', fontWeight: '800', color: '#f59e0b' }, fmtFull(root.totalTokens)))
       big.appendChild(el('span', { fontSize: '11px', color: '#9ca3af' }, '总 Token（请求+响应估算）'))
       card.appendChild(big)
       if (root.baseline && root.baseline.kind === 'usage') {

@@ -41,6 +41,7 @@
     })
   }
   function fmt(n) { return n >= 1000000 ? (n / 1000000).toFixed(2) + 'M' : (n / 1000).toFixed(1) + 'k' }
+  function fmtFull(n) { return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
 
   // ================= 引擎不可用提示 =================
   // /company-api 由 Software Company 预置（按会话挂载）注册；仅宿主面板常驻。
@@ -706,18 +707,37 @@
     renderCurrent()
   }
 
-  var tok = { cur: 0, target: 0, started: false }
-  // 常驻缓动循环：向最新 target 平滑趋近；显示值不变时不重写文本（消除无谓的每帧 DOM 写入）
+  var tok = { cur: 0, target: 0, started: false, lastTick: 0 }
+  var tokSamples = []
+  // 分批跳动：每 ~260ms 向 target 迈一个可见批（约 32% 剩余量），数字逐批上跳并闪亮，
+  // 流式消耗期间每秒都有可见的「跳动」观感（而非平滑缓动或完成时才跳变）。
   function tickTokens() {
     if (tok.started) return
     tok.started = true
-    function step() {
+    function flash(el, color) {
+      if (!el) return
+      el.style.color = color
+      setTimeout(function () { el.style.color = '#f59e0b' }, 140)
+    }
+    function step(now) {
+      if (!tok.lastTick) tok.lastTick = now
       var diff = tok.target - tok.cur
-      if (Math.abs(diff) < Math.max(10, Math.abs(tok.target) * 0.001)) tok.cur = tok.target
-      else tok.cur += diff * 0.06
-      var v = fmt(tok.cur)
-      var el = $('tokTotal'); if (el && el.textContent !== v) el.textContent = v
-      var cap = $('capTok'); if (cap && cap.textContent !== v) cap.textContent = v
+      if (diff > 0 && now - tok.lastTick >= 260) {
+        tok.lastTick = now
+        var chunk = Math.max(1, Math.round(diff * 0.32))
+        tok.cur = Math.min(tok.target, tok.cur + chunk)
+        var v = fmtFull(tok.cur)
+        var el = $('tokTotal')
+        if (el && el.textContent !== v) { el.textContent = v; flash(el, '#fde68a') }
+        var cap = $('capTok')
+        if (cap) { var cv = fmt(tok.cur); if (cap.textContent !== cv) cap.textContent = cv }
+      } else if (diff < 0 || (diff === 0 && tok.cur !== tok.target)) {
+        tok.cur = tok.target
+        var v2 = fmtFull(tok.cur)
+        var el2 = $('tokTotal'); if (el2 && el2.textContent !== v2) el2.textContent = v2
+        var cap2 = $('capTok')
+        if (cap2) { var cv2 = fmt(tok.cur); if (cap2.textContent !== cv2) cap2.textContent = cv2 }
+      }
       requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
@@ -899,6 +919,18 @@
       if (surfEl) {
         var sv = fmt(d.totalSurface || 0)
         if (surfEl.textContent !== sv) surfEl.textContent = sv
+      }
+      // 近 1 分钟增量：滚动采样窗口，流式期间每秒可见增长
+      var nowMs2 = Date.now()
+      tokSamples.push({ t: nowMs2, v: d.totalTokens || 0 })
+      while (tokSamples.length && nowMs2 - tokSamples[0].t > 60000) tokSamples.shift()
+      var deltaEl = $('tokDelta')
+      if (deltaEl) {
+        var base = tokSamples[0] ? tokSamples[0].v : (d.totalTokens || 0)
+        var dv = (d.totalTokens || 0) - base
+        var dtxt = (dv >= 0 ? '+' : '') + fmt(dv)
+        if (deltaEl.textContent !== dtxt) deltaEl.textContent = dtxt
+        deltaEl.style.color = dv > 0 ? '#86efac' : (dv < 0 ? '#fca5a5' : '#6b7280')
       }
       renderChips()
       // 聚焦任务在画布数据到达后才确定：首个轮询周期的环节事件可能已按上面规则跳过，
