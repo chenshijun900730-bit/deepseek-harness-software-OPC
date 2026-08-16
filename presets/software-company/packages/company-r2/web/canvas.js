@@ -120,7 +120,7 @@
   function tipHtml(n) {
     var d = STATE.depts[n.dept] || {}
     return '<h4>' + (n.title || n.id) + '</h4><div>' + (STATE.done[n.id] ? '✅ 已完成' : (isWorkingNow(n) ? '⚙ 工作中' : '⏳ 排队/等待')) + '</div>' +
-      '<div style="color:#9ca3af;margin-top:3px;">部门：' + n.dept + ' · 模型：' + (d.model || '?') + ' · ' + (d.reasoning || '?') + '<br/>token 本轮 ' + fmt(d.totalTokens || 0) + ' · 排名 ' + (d.rank || '-') + '</div>'
+      '<div style="color:#9ca3af;margin-top:3px;">部门：' + n.dept + ' · 模型：' + (d.model || '?') + ' · ' + (d.reasoning || '?') + '<br/>token 本轮 ' + fmt(d.totalTokens || 0) + ' · 表面 ' + fmt(d.surfaceTokens || 0) + ' · 排名 ' + (d.rank || '-') + '</div>'
   }
 
   function showTip(ev, html, x, y) {
@@ -281,6 +281,11 @@
         var txt = '⚡' + fmt(d.totalTokens || 0)
         if (t.textContent !== txt) t.textContent = txt
       }
+      var s = el.querySelector('.dsurf')
+      if (s) {
+        var stxt = '⇧' + fmt(d.surfaceTokens || 0)
+        if (s.textContent !== stxt) s.textContent = stxt
+      }
     })
   }
   function renderOrg() {
@@ -346,13 +351,14 @@
       el.id = 'nd-dept-' + o.id
       el.style.cssText = 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w + 'px;border-color:' + s.border + ';background:' + s.bg + ';color:' + s.color
       var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
+      var surfs = ' · <span class="dsurf" title="上下文表面：随流式输出实时增长">⇧' + fmt(d.surfaceTokens || 0) + '</span>'
       var doneNote = allDone ? ' · ✅' : (doneDepts[o.id] ? ' · ✅' + doneDepts[o.id] + '/' + flowDepts[o.id] : '')
-      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + doneNote + toks + '</small>'
+      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + doneNote + toks + surfs + '</small>'
       el.addEventListener('click', function () { if (justMoved) return; openOrgDept(o.id) })
       el.addEventListener('pointerdown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
         showTip(ev, '<h4>🏢 ' + (r.title || o.id) + '</h4><div style="color:#9ca3af;">模型：' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
-          '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) +
+          '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) + ' · 表面 ' + fmt(d.surfaceTokens || 0) +
           '<br/>环节 ' + (doneDepts[o.id] || 0) + '/' + (flowDepts[o.id] || 0) + ' 完结' + (allDone ? '（全部完结 ✅）' : '') + '<br/>点击查看调用记录</div>', el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
       })
       el.addEventListener('mouseleave', window.hideTip)
@@ -585,7 +591,7 @@
     var recent = calls.slice(-10).reverse()
     fillPanel('<div style="font-weight:700;color:#7dd3fc;padding:6px 10px;">部门抽屉：' + (r.title || id) + '</div>' +
       '<div class="drawer"><div class="k">模型</div>' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
-      '<div class="k" style="margin-top:6px;">token</div>累计 ' + fmt(d.totalTokens || 0) + ' · 排名 ' + (d.rank || '-') +
+      '<div class="k" style="margin-top:6px;">token</div>累计 ' + fmt(d.totalTokens || 0) + ' · 表面 ' + fmt(d.surfaceTokens || 0) + ' · 排名 ' + (d.rank || '-') +
       '<div class="k" style="margin-top:6px;">调用记录（' + (STATE.focusTask ? '聚焦任务 ' : '全部') + calls.length + ' 次 · 点行看详情）</div>' +
       (recent.length ? recent.map(function (c, i) {
         return '<div data-call-idx="' + i + '" style="padding:3px 0;border-bottom:1px solid #141a26;cursor:pointer;">' + String(c.at || '').slice(11, 19) + ' · ' + (c.taskId || '?') + ' · ' + fmtDur(c.durationMs) + ' · ' + (c.model || '?') + ' · ⚡' + fmt(c.tokens || 0) + '</div>'
@@ -888,6 +894,12 @@
       if (STATE.view === 'org') { spawnTokenChips(); spawnNewCallChips(d.dispatches || []) }
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
+      // 表面 token 随流式输出实时增长（低延迟观感）
+      var surfEl = $('tokSurface')
+      if (surfEl) {
+        var sv = fmt(d.totalSurface || 0)
+        if (surfEl.textContent !== sv) surfEl.textContent = sv
+      }
       renderChips()
       // 聚焦任务在画布数据到达后才确定：首个轮询周期的环节事件可能已按上面规则跳过，
       // 由 flow 回填兜底（done/started 均已持久化在 RUN_STATE）。

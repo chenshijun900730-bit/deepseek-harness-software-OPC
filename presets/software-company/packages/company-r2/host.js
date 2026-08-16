@@ -813,7 +813,7 @@ export default {
         if (tokenHistory.length > 120) tokenHistory.splice(0, tokenHistory.length - 120)
       } catch (e) {}
     }
-    ctx.interval(sampleTokens, 5000)
+    ctx.interval(sampleTokens, 2000)
     sampleTokens()
 
     // 已结束子代理的行来源：持久会话列表（origin=subagent 或有 parentSession）
@@ -1251,11 +1251,14 @@ export default {
         })
       }
       callList.sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')) })
+      // 总量 = 全部会话行（引擎自身会话消耗 + 派工子代理 + 已结束子代理投影），
+      // 每个 LLM 回复完成时跳增；totalSurface 随流式输出实时增长（低延迟观感）。
+      const allRows = tokens.rows || []
       return {
         tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
         depts, dispatchDepts, roles, dispatches: callList.slice(-60),
-        // 总量只算本项目派工记录归属的 token（与画布部门徽标同口径，跨项目会话不计入）
-        totalTokens: scopedAttributed.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        totalTokens: allRows.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        totalSurface: allRows.reduce(function (s, r) { return s + (r.surfaceTokens || 0) }, 0),
         concurrency: CONCURRENCY.limit || 3,
         at: now(),
       }
