@@ -3,11 +3,12 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { tasks: [], events: [], seq: 0, depts: {}, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
+  var STATE = { tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
-    return STATE.workingStage === n.id || STATE.started.has(n.id) || (ACTIVE_EXEC.indexOf(STATE.current) >= 0 && STATE.ready.has(n.id))
+    var dispatched = (STATE.dispatchDepts[STATE.focusTask] || []).indexOf(n.dept) >= 0
+    return STATE.workingStage === n.id || STATE.started.has(n.id) || dispatched || (ACTIVE_EXEC.indexOf(STATE.current) >= 0 && STATE.ready.has(n.id))
   }
 
   var STATUS_STYLE = {
@@ -269,6 +270,9 @@
       (d.events || []).forEach(function (ev) {
         STATE.seq = ev.seq
         pushEvent(ev)
+        // 只把属于当前聚焦任务的环节事件应用到画布（多任务共存时防止串台）；
+        // 切换任务时 flow 接口会回填该任务的权威 done/started，跳过的实时事件不丢状态。
+        if (ev.taskId && ev.taskId !== STATE.focusTask) return
         if (ev.type === 'stage.started') { STATE.workingStage = ev.stage; STATE.started.add(ev.stage); if (STATE.flow) renderNodes(STATE.flow) }
         if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; STATE.started.delete(ev.stage); if (STATE.flow) renderNodes(STATE.flow) }
         if (ev.type === 'adjudication.started') showAdjNode(ev)
@@ -278,11 +282,15 @@
     api('/company-api/canvas').then(function (d) {
       STATE.tasks = d.tasks || []
       STATE.depts = d.depts || {}
+      STATE.dispatchDepts = d.dispatchDepts || {}
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
       tickTokens()
       renderChips()
+      // 聚焦任务在画布数据到达后才确定：首个轮询周期的环节事件可能已按上面规则跳过，
+      // 由 flow 回填兜底（done/started 均已持久化在 RUN_STATE）。
       var fid = STATE.focusTask || (STATE.tasks[0] && STATE.tasks[0].taskId)
+      STATE.focusTask = fid
       if (fid) {
         api('/company-api/flow?taskId=' + encodeURIComponent(fid)).then(function (f) {
           if (f.legacy) { STATE.flow = null; renderNodes(null); return }

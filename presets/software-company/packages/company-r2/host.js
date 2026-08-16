@@ -318,6 +318,9 @@ export default {
       if (to === 'CONTRACT_SIGNED') {
         // 合同冻结 = 规划/调研/架构环节完成
         nodes.forEach(function (n) { if (['planner', 'architect', 'explorer'].indexOf(n.dept) >= 0) complete(n) })
+      } else if (to === 'DISCOVERY' || to === 'PRODUCT_PLANNED') {
+        // 发现/规划阶段：规划类角色开始工作（画布点亮 plan/explore/arch）
+        nodes.forEach(function (n) { if (['planner', 'architect', 'explorer'].indexOf(n.dept) >= 0) start(n) })
       } else if (to === 'IMPLEMENTING') {
         ready().forEach(function (id) { start(byId(id)) })
       } else if (to === 'SELF_CHECK' || to === 'INTEGRATING') {
@@ -971,10 +974,27 @@ export default {
       const dispatches = await listDispatchRecords()
       const attributed = attributeUsage(tokens.rows || [], dispatches)
       const depts = aggregateByDepartment(attributed)
+      // 部门档案并入（模型/reasoning/中文名），画布抽屉与悬停卡直接展示
+      for (const k of Object.keys(depts)) {
+        const role = ROLES[k]
+        if (role) { depts[k].model = role.model; depts[k].reasoning = role.reasoning; depts[k].title = role.title }
+      }
       const tasks = await listAllTasks()
+      // 每个任务当前活跃的派工部门（子代理已启动/在跑，状态机尚未推进时画布也点亮对应节点）
+      const activeByTask = new Map()
+      for (const a of attributed) {
+        if (!a.taskId || !a.department) continue
+        const set = activeByTask.get(a.taskId) || new Set()
+        set.add(a.department)
+        activeByTask.set(a.taskId, set)
+      }
+      const dispatchDepts = {}
+      for (const [k, v] of activeByTask) dispatchDepts[k] = [...v]
       return {
         tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
-        depts, totalTokens: (tokens.rows || []).reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        depts, dispatchDepts,
+        // 总量只算本项目派工记录归属的 token（与画布部门徽标同口径，跨项目会话不计入）
+        totalTokens: attributed.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
         concurrency: CONCURRENCY.limit || 3,
         at: now(),
       }
@@ -985,10 +1005,57 @@ export default {
       return base + '/.company-harness/dispatches.jsonl'
     }
     async function recordDispatch(d) { appendEvent(await dispatchFile(), d) }
+    // 派工记录补全：从子代理会话首条用户消息解析「…软件公司 Harness 中的 **角色**…（任务 TASK-…）」
+    // 得到 department（角色 id）与 taskId。缓存 120s，避免 2s 轮询反复读会话日志。
+    const dispatchEnrichCache = new Map()
+    function roleIdOfTitle(t) {
+      if (!t) return undefined
+      const s = String(t).toLowerCase()
+      for (const r of Object.values(ROLES)) {
+        if (s.indexOf(r.id) >= 0) return r.id
+        if (s.indexOf(String(r.title || '').toLowerCase()) >= 0) return r.id
+      }
+      return undefined
+    }
+    async function enrichDispatch(d) {
+      if (!d || !d.sessionId) return d
+      const cached = dispatchEnrichCache.get(d.sessionId)
+      if (cached !== undefined && Date.now() - cached.at < 120000) {
+        d.department = cached.dept
+        d.taskId = cached.taskId
+        return d
+      }
+      let dept, taskId
+      try {
+        const sq = ctx.get('sessionQuery')
+        if (sq !== undefined) {
+          const snap = await sq.readSession(d.sessionId)
+          for (const e of (snap && snap.events) || []) {
+            if (e && e.type === 'user/message' && e.data && Array.isArray(e.data.content)) {
+              for (const c of e.data.content) {
+                if (c && typeof c.text === 'string') {
+                  const m = c.text.match(/软件公司 Harness 中的\s*\**([^*\n]+)\**/)
+                  if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
+                  const t = c.text.match(/(?:（任务|任务编号[：:])\s*([A-Z][A-Z0-9-]*)/)
+                  if (t && !taskId) taskId = t[1]
+                }
+              }
+            }
+            if (dept && taskId) break
+          }
+        }
+      } catch (e) {}
+      dispatchEnrichCache.set(d.sessionId, { at: Date.now(), dept, taskId })
+      d.department = dept
+      d.taskId = taskId
+      return d
+    }
     async function listDispatchRecords() {
       const text = await readTextAt(await dispatchFile())
       if (!text) return []
-      return text.split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l) } catch (e) { return null } }).filter(Boolean)
+      const raw = text.split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l) } catch (e) { return null } }).filter(Boolean)
+      for (const d of raw) await enrichDispatch(d)
+      return raw
     }
 
     async function taskDetail(taskId) {
