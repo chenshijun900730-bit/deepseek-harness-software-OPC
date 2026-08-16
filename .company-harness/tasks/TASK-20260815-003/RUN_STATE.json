@@ -1,0 +1,375 @@
+{
+  "schema": 1,
+  "taskId": "TASK-20260815-003",
+  "projectDir": "/Users/xiaowanzi/Documents/Deepseek/software-company-harness",
+  "requirement": "修复演示应用页脚年份硬编码问题",
+  "mode": "auto",
+  "createdAt": "2026-08-15T08:48:48.444Z",
+  "updatedAt": "2026-08-15T09:23:38.553Z",
+  "status": "QA_RUNNING",
+  "pausedFrom": null,
+  "classification": {
+    "type": "small",
+    "factors": {
+      "ambiguity": "low",
+      "moduleSpan": "single",
+      "dataImpact": false,
+      "externalIntegration": false,
+      "failureRisk": "low"
+    },
+    "team": [
+      "coordinator",
+      "generator"
+    ],
+    "forceSecurityReview": false,
+    "requireFinalE2E": false,
+    "reclassifiedAt": null,
+    "reclassReason": null
+  },
+  "sprints": [
+    {
+      "id": "S01",
+      "status": "SIGNED",
+      "repairAttempts": 3,
+      "verdicts": [
+        {
+          "verdict": "FAIL",
+          "by": "coordinator",
+          "at": "2026-08-15T09:02:21.834Z",
+          "refs": [
+            "tests/test-footer-01.out"
+          ],
+          "report": "TEST-FOOTER-01 确定性测试失败：页脚年份输出 2025，当前年份为 2026，断言不通过。复现：node tests/test-footer-01.js。"
+        },
+        {
+          "verdict": "FAIL",
+          "by": "coordinator",
+          "at": "2026-08-15T09:02:41.388Z",
+          "refs": [
+            "tests/test-footer-01-rerun-1.out"
+          ],
+          "report": "复验 #1：TEST-FOOTER-01 仍失败（输出 2024 ≠ 当前年份）。复现：node tests/test-footer-01.js。"
+        },
+        {
+          "verdict": "FAIL",
+          "by": "coordinator",
+          "at": "2026-08-15T09:02:41.507Z",
+          "refs": [
+            "tests/test-footer-01-rerun-2.out"
+          ],
+          "report": "复验 #2：TEST-FOOTER-01 仍失败（输出 1999 ≠ 当前年份）。两次定点修复均已失败。"
+        }
+      ],
+      "implementers": [
+        "generator",
+        "repair-generator"
+      ],
+      "contractChecksum": "199d8fbb",
+      "deterministicCoverage": true,
+      "finalSprint": true,
+      "contractSignedAt": "2026-08-15T08:49:26.973Z"
+    },
+    {
+      "id": "S02",
+      "status": "SIGNED",
+      "repairAttempts": 2,
+      "verdicts": [
+        {
+          "verdict": "FAIL",
+          "by": "coordinator",
+          "at": "2026-08-15T09:03:08.180Z",
+          "refs": [
+            "tests/test-footer-02.out"
+          ],
+          "report": "重规划后 S02 复验：TEST-FOOTER-02 仍失败（注入 2021 ≠ 当前年份）。按 H-10：重新规划后仍 FAIL → 暂停，向用户提交证据与决策选项。"
+        },
+        {
+          "verdict": "FAIL",
+          "by": "coordinator",
+          "at": "2026-08-15T09:20:14.854Z",
+          "refs": [
+            "tests/test-footer-02.out"
+          ],
+          "report": "S02 复验（重规划后）：TEST-FOOTER-02 仍失败（注入 2021 ≠ 当前年份）。按 H-10 平衡返工算法：已用尽 2 次定点修复与 1 次重新规划，重新规划后仍 FAIL → 暂停，向用户提交证据与决策选项。"
+        }
+      ],
+      "implementers": [
+        "generator"
+      ],
+      "contractChecksum": "463f2f60",
+      "deterministicCoverage": true,
+      "finalSprint": true,
+      "contractSignedAt": "2026-08-15T09:03:08.015Z"
+    }
+  ],
+  "currentSprint": "S02",
+  "replans": 1,
+  "finalRepairs": 0,
+  "repairPhase": "sprint",
+  "approvals": [],
+  "history": [
+    {
+      "at": "2026-08-15T08:48:48.511Z",
+      "from": "INTAKE",
+      "to": "CLASSIFIED",
+      "reason": "五维分类完成：small",
+      "refs": [
+        "tasks/TASK-20260815-003/TASK_BRIEF.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:48:48.519Z",
+      "from": "CLASSIFIED",
+      "to": "DISCOVERY",
+      "reason": "发现阶段完成：规格与计划骨架就绪",
+      "refs": [
+        "tasks/TASK-20260815-003/PRODUCT_SPEC.md",
+        "tasks/TASK-20260815-003/SPRINT_PLAN.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:48:48.529Z",
+      "from": "DISCOVERY",
+      "to": "PRODUCT_PLANNED",
+      "reason": "产品规划骨架产出，待 Planner 填充",
+      "refs": [
+        "tasks/TASK-20260815-003/PRODUCT_SPEC.md",
+        "tasks/TASK-20260815-003/SPRINT_PLAN.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:48:48.545Z",
+      "from": "PRODUCT_PLANNED",
+      "to": "SPRINT_DRAFTING",
+      "reason": "全自动模式：可逆低风险默认假设已记录于 DECISIONS.md，自动推进",
+      "refs": [
+        "tasks/TASK-20260815-003/DECISIONS.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:49:26.973Z",
+      "from": "SPRINT_DRAFTING",
+      "to": "CONTRACT_SIGNED",
+      "reason": "Sprint 合同已冻结签署（coordinator，校验值 199d8fbb）",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S01/SPRINT_CONTRACT.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:53:43.163Z",
+      "from": "CONTRACT_SIGNED",
+      "to": "CONTRACT_SIGNED",
+      "reason": "generator 声明所有权：demo-app/footer.js",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/WORK_OWNERSHIP.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:53:43.223Z",
+      "from": "CONTRACT_SIGNED",
+      "to": "CONTRACT_SIGNED",
+      "reason": "integrator 声明所有权：package.json",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/WORK_OWNERSHIP.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:13.633Z",
+      "from": "CONTRACT_SIGNED",
+      "to": "IMPLEMENTING",
+      "reason": "合同已签署，进入实现",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S01/SPRINT_CONTRACT.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:13.680Z",
+      "from": "IMPLEMENTING",
+      "to": "SELF_CHECK",
+      "reason": "实现完成，Generator 自检通过",
+      "refs": [
+        "impl-20260815-003",
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S01/IMPLEMENTATION.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:13.699Z",
+      "from": "SELF_CHECK",
+      "to": "QA_RUNNING",
+      "reason": "单工作区，进入 QA",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S01/IMPLEMENTATION.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:21.834Z",
+      "from": "QA_RUNNING",
+      "to": "REPAIRING",
+      "reason": "验收 FAIL（第 1 次）→ 硬路由：启动全新 Repair Generator（deepseek-v4-pro/high）定点修复；QA 重新取证；全新 Evaluator 上下文复验",
+      "refs": [
+        "tests/test-footer-01.out"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:41.339Z",
+      "from": "REPAIRING",
+      "to": "QA_RUNNING",
+      "reason": "修复 #1 完成，重新取证复验",
+      "refs": [
+        "repair-001-20260815"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:41.389Z",
+      "from": "QA_RUNNING",
+      "to": "REPAIRING",
+      "reason": "验收 FAIL（第 2 次）→ 硬路由：启动全新 Repair Generator（deepseek-v4-pro/high）定点修复；QA 重新取证；全新 Evaluator 上下文复验",
+      "refs": [
+        "tests/test-footer-01-rerun-1.out"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:41.458Z",
+      "from": "REPAIRING",
+      "to": "QA_RUNNING",
+      "reason": "修复 #2 完成，重新取证复验",
+      "refs": [
+        "repair-002-20260815"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:02:41.507Z",
+      "from": "QA_RUNNING",
+      "to": "REPLANNING",
+      "reason": "两次定点修复后仍 FAIL → Planner＋架构负责人重新规划一次；Coordinator(Max) 确认仍在已批准范围后重实现",
+      "refs": [
+        "tests/test-footer-01-rerun-2.out"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:03:07.982Z",
+      "from": "REPLANNING",
+      "to": "SPRINT_DRAFTING",
+      "reason": "重新规划完成，Coordinator(Max) 确认仍在已批准范围",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/SPRINT_PLAN.md",
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/DECISIONS.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:03:08.015Z",
+      "from": "SPRINT_DRAFTING",
+      "to": "CONTRACT_SIGNED",
+      "reason": "Sprint 合同已冻结签署（coordinator，校验值 463f2f60）",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S02/SPRINT_CONTRACT.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:03:08.033Z",
+      "from": "CONTRACT_SIGNED",
+      "to": "IMPLEMENTING",
+      "reason": "S02 合同签署，进入实现",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S02/SPRINT_CONTRACT.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:03:08.086Z",
+      "from": "IMPLEMENTING",
+      "to": "SELF_CHECK",
+      "reason": "S02 实现完成",
+      "refs": [
+        "impl-20260815-003b"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:03:08.104Z",
+      "from": "SELF_CHECK",
+      "to": "QA_RUNNING",
+      "reason": "单工作区，进入 QA",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/sprints/S02/IMPLEMENTATION.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:03:08.180Z",
+      "from": "QA_RUNNING",
+      "to": "PAUSED",
+      "reason": "重新规划后仍 FAIL → 暂停，向用户提交证据与决策选项（H-10）",
+      "refs": [
+        "tests/test-footer-02.out"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:15:11.724Z",
+      "from": "PAUSED",
+      "to": "QA_RUNNING",
+      "reason": "恢复：用户通过 UI 面板点击恢复（此前因插件 bug 被拦，重试）",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/HANDOFF.md",
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/RUN_STATE.json"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:20:14.855Z",
+      "from": "QA_RUNNING",
+      "to": "PAUSED",
+      "reason": "重新规划后仍 FAIL → 暂停，向用户提交证据与决策选项（H-10）",
+      "refs": [
+        "tests/test-footer-02.out"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:21:00.316Z",
+      "from": "PAUSED",
+      "to": "QA_RUNNING",
+      "reason": "用户通过 UI 恢复：user via UI",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-003/RUN_STATE.json"
+      ]
+    }
+  ],
+  "rolesLaunched": [
+    {
+      "at": "2026-08-15T09:02:13.615Z",
+      "role": "generator",
+      "model": "deepseek-v4-pro",
+      "reasoning": "high",
+      "purpose": "implement S01 页脚年份修复"
+    },
+    {
+      "at": "2026-08-15T09:02:41.283Z",
+      "role": "repair-generator",
+      "model": "deepseek-v4-pro",
+      "reasoning": "high",
+      "purpose": "implement 定点修复 #1（全新上下文）"
+    },
+    {
+      "at": "2026-08-15T09:02:41.407Z",
+      "role": "repair-generator",
+      "model": "deepseek-v4-pro",
+      "reasoning": "high",
+      "purpose": "implement 定点修复 #2（再次全新上下文）"
+    }
+  ],
+  "ownershipConflicts": [
+    {
+      "at": "2026-08-15T08:53:43.180Z",
+      "incoming": {
+        "role": "department-generator",
+        "paths": [
+          "demo-app/"
+        ]
+      },
+      "existing": {
+        "role": "generator",
+        "paths": [
+          "demo-app/footer.js"
+        ],
+        "worktree": "software-company-harness-company-worktrees/TASK-003/backend",
+        "branch": null
+      }
+    }
+  ]
+}

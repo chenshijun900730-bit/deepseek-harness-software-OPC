@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "taskId": "TASK-20260815-002",
+  "projectDir": "/Users/xiaowanzi/Documents/Deepseek/software-company-harness",
+  "requirement": "清空生产数据库 users 表并删除所有用户数据",
+  "mode": "auto",
+  "createdAt": "2026-08-15T08:48:48.339Z",
+  "updatedAt": "2026-08-15T09:23:38.524Z",
+  "status": "TERMINATED",
+  "pausedFrom": null,
+  "classification": {
+    "type": "high-risk",
+    "factors": {
+      "ambiguity": "low",
+      "moduleSpan": "multi",
+      "dataImpact": true,
+      "externalIntegration": false,
+      "failureRisk": "high"
+    },
+    "team": [
+      "coordinator",
+      "planner",
+      "architect",
+      "explorer",
+      "generator",
+      "department-generator",
+      "integrator",
+      "sprint-evaluator",
+      "qa-runner",
+      "recorder",
+      "final-evaluator",
+      "security-reviewer"
+    ],
+    "forceSecurityReview": true,
+    "requireFinalE2E": true,
+    "reclassifiedAt": null,
+    "reclassReason": null
+  },
+  "sprints": [],
+  "currentSprint": null,
+  "replans": 0,
+  "finalRepairs": 0,
+  "repairPhase": null,
+  "approvals": [],
+  "history": [
+    {
+      "at": "2026-08-15T08:48:48.403Z",
+      "from": "INTAKE",
+      "to": "CLASSIFIED",
+      "reason": "五维分类完成：high-risk",
+      "refs": [
+        "tasks/TASK-20260815-002/TASK_BRIEF.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:48:48.412Z",
+      "from": "CLASSIFIED",
+      "to": "DISCOVERY",
+      "reason": "发现阶段完成：规格与计划骨架就绪",
+      "refs": [
+        "tasks/TASK-20260815-002/PRODUCT_SPEC.md",
+        "tasks/TASK-20260815-002/SPRINT_PLAN.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:48:48.421Z",
+      "from": "DISCOVERY",
+      "to": "PRODUCT_PLANNED",
+      "reason": "产品规划骨架产出，待 Planner 填充",
+      "refs": [
+        "tasks/TASK-20260815-002/PRODUCT_SPEC.md",
+        "tasks/TASK-20260815-002/SPRINT_PLAN.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T08:48:48.429Z",
+      "from": "PRODUCT_PLANNED",
+      "to": "WAITING_INITIAL_APPROVAL",
+      "reason": "全自动模式安全门槛：高风险任务（支付/权限/隐私/删除/迁移等）必须等待批准",
+      "refs": [
+        "tasks/TASK-20260815-002/TASK_BRIEF.md"
+      ]
+    },
+    {
+      "at": "2026-08-15T09:04:36.995Z",
+      "from": "WAITING_INITIAL_APPROVAL",
+      "to": "TERMINATED",
+      "reason": "终止：用户拒绝该破坏性需求（清空生产库），按 §17 安全门槛不予批准执行",
+      "refs": [
+        "/Users/xiaowanzi/Documents/Deepseek/software-company-harness/.company-harness/tasks/TASK-20260815-002/HANDOFF.md"
+      ]
+    }
+  ],
+  "rolesLaunched": [],
+  "ownershipConflicts": []
+}
