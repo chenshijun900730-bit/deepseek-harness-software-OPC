@@ -41,6 +41,8 @@
 
   function renderNodes(flow) {
     if (!cv) return
+    if (DRAG && !DRAG.org) return // 流程视图拖拽中：重建会丢失拖拽引用，挂起待拖完
+    if (DRAG && !DRAG.el.isConnected) cancelDrag()
     cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
     cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
     var coord = $('nd-coord'); if (coord) coord.style.display = ''
@@ -238,6 +240,15 @@
     // 数据无变化时不整树重建（消除每 2s 轮询带来的闪动），只原位更新 token 徽标
     var sig = orgSignature()
     if (sig === STATE.orgSig) { updateDeptBadges(); return }
+    if (DRAG && DRAG.org) {
+      // 拖拽进行中不重建：旧元素一旦移除，拖拽代码会从脱离文档的元素读
+      // offsetLeft(恒 0) 把布局坐标写成 (0,0)，节点瞬间跳到左上角。
+      // 不推进 orgSig —— 拖完由 endDrag 的 renderCurrent 按最新数据重建，
+      // 此时 ORG 坐标已含本次拖动的新位置。
+      updateDeptBadges()
+      return
+    }
+    if (DRAG && !DRAG.el.isConnected) cancelDrag()
     STATE.orgSig = sig
     cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
     cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
@@ -416,7 +427,11 @@
     e.preventDefault()
     var el = e.currentTarget
     try { el.setPointerCapture(e.pointerId) } catch (err) {}
-    DRAG = { el: el, dx: e.clientX - el.offsetLeft, dy: e.clientY - el.offsetTop, moved: false, org: el.id.indexOf('nd-dept-') === 0 }
+    // 关键：指针偏移必须统一在画布坐标系里算（clientX/Y 是视口坐标，
+    // offsetLeft/Top 是相对 cv 的坐标，两者相减前要先减 cv 的视口位置，
+    // 否则误差等于 cv.top —— 页面头部一高，向下拖都会被钳到顶部）
+    var r = cv.getBoundingClientRect()
+    DRAG = { el: el, dx: e.clientX - r.left - el.offsetLeft, dy: e.clientY - r.top - el.offsetTop, moved: false, org: el.id.indexOf('nd-dept-') === 0 }
     document.addEventListener('pointermove', onDrag)
     document.addEventListener('pointerup', endDrag)
     document.addEventListener('pointercancel', endDrag)
@@ -439,6 +454,12 @@
       renderEdges(STATE.flow)
     }
   }
+  function cancelDrag() {
+    DRAG = null
+    document.removeEventListener('pointermove', onDrag)
+    document.removeEventListener('pointerup', endDrag)
+    document.removeEventListener('pointercancel', endDrag)
+  }
   function endDrag(e) {
     if (DRAG && DRAG.moved) { justMoved = true; setTimeout(function () { justMoved = false }, 0) }
     try { if (e && e.pointerId !== undefined && DRAG && DRAG.el.releasePointerCapture) DRAG.el.releasePointerCapture(e.pointerId) } catch (err) {}
@@ -446,6 +467,8 @@
     document.removeEventListener('pointermove', onDrag)
     document.removeEventListener('pointerup', endDrag)
     document.removeEventListener('pointercancel', endDrag)
+    // 拖拽期间被挂起的重建（新调用/新 Token 数据）在松手后补齐
+    renderCurrent()
   }
 
   var tok = { cur: 0, target: 0, started: false }
