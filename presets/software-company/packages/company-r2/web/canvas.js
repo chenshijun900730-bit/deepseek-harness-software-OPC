@@ -3,7 +3,7 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
+  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
@@ -716,8 +716,66 @@
     })
   }
 
+  // ================= 会话级隔离：每个对话框一个 Company =================
+  function detectParentSessionTitle() {
+    try {
+      if (window.parent && window.parent !== window && window.parent.document) {
+        var sel = window.parent.document.querySelector('.pqeL5W_sessionRow.pqeL5W_selected .pqeL5W_title')
+        if (sel && sel.textContent) return sel.textContent.trim()
+      }
+    } catch (e) {}
+    return null
+  }
+  function scopeQuery() { return STATE.scope ? '&scope=' + encodeURIComponent(STATE.scope) : '' }
+  function renderScopeChips() {
+    var box = $('scopeChips')
+    if (!box) return
+    var sig = STATE.scope + '|' + (STATE.sessions || []).map(function (s) { return s.sessionId + ':' + s.title }).join(',')
+    if (box.dataset.sig === sig) return
+    box.dataset.sig = sig
+    box.innerHTML = ''
+    function chip(label, val, on) {
+      var s = document.createElement('span')
+      s.className = 'chip' + (on ? ' on' : '')
+      s.textContent = label
+      s.style.cursor = 'pointer'
+      s.addEventListener('click', function () { window.__selectScope(val) })
+      box.appendChild(s)
+    }
+    chip('🏢 全部', null, STATE.scope === null)
+    ;(STATE.sessions || []).forEach(function (s) {
+      chip('📂 ' + (s.title || String(s.sessionId || '').slice(0, 8)) + ' · ' + s.taskCount, s.sessionId, STATE.scope === s.sessionId)
+    })
+  }
+  window.__selectScope = function (id) {
+    STATE.scope = id || null
+    STATE.scopeChosen = true
+    STATE.focusTask = null
+    STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
+    STATE.seq = 0
+    $('evList').innerHTML = ''
+    renderChips(); renderScopeChips()
+    poll()
+  }
+  function autoDetectScope(sessions) {
+    if (STATE.scopeChosen) return false
+    var title = detectParentSessionTitle()
+    if (!title) return false
+    var hit = null
+    sessions.forEach(function (s) { if (s.title === title) hit = s.sessionId })
+    if (hit && STATE.scope !== hit) {
+      STATE.scope = hit
+      STATE.focusTask = null
+      STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []
+      STATE.seq = 0
+      var ev = $('evList'); if (ev) ev.innerHTML = ''
+      return true
+    }
+    return false
+  }
+
   function poll() {
-    api('/company-api/events?seq=' + STATE.seq).then(function (d) {
+    api('/company-api/events?seq=' + STATE.seq + scopeQuery()).then(function (d) {
       (d.events || []).forEach(function (ev) {
         STATE.seq = ev.seq
         pushEvent(ev)
@@ -730,7 +788,7 @@
         if (ev.type === 'adjudication.decided') { var a = $('nd-adj'); if (a) a.remove() }
       })
     }).catch(function () {})
-    api('/company-api/canvas').then(function (d) {
+    api('/company-api/canvas' + (STATE.scope ? '?scope=' + encodeURIComponent(STATE.scope) : '')).then(function (d) {
       STATE.tasks = d.tasks || []
       STATE.depts = d.depts || {}
       STATE.dispatchDepts = d.dispatchDepts || {}
@@ -773,6 +831,13 @@
       } else {
         if (STATE.view === 'org') renderOrg()
       }
+    }).catch(function () {})
+    // 会话清单 + 自动识别当前对话框（每个对话框一个 Company）
+    api('/company-api/sessions').then(function (d) {
+      STATE.sessions = Array.isArray(d) ? d : []
+      var changed = autoDetectScope(STATE.sessions)
+      renderScopeChips()
+      if (changed) poll()
     }).catch(function () {})
   }
 

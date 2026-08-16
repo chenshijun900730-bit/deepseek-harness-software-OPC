@@ -56,6 +56,10 @@
   let confirmAction = null
   let canvasOpen = true
   let refreshSig = ''
+  // 会话级隔离：每个对话框一个 Company
+  let scope = null
+  let scopeChosen = false
+  let sessions = []
 
   const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
   pill.addEventListener('click', function () { open = true; render() })
@@ -78,7 +82,7 @@
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
   closeBtn.addEventListener('click', function () { open = false; render() })
-  headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
+  headerBtns.appendChild(scopeSel); headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
   header.appendChild(title); header.appendChild(headerBtns)
 
   // 画布区（任务选项卡上方）：iframe 复用 /company 页；收起时卸载停轮询，展开时重新挂载
@@ -208,11 +212,29 @@
   }
   async function refreshAll() {
     let sig = ''
-    try { const d = await getJSON('/company-api/dashboard'); tasks = d.tasks || []; sig += 'T' + JSON.stringify(tasks) } catch (e) { tasks = []; sig += 'T[]' }
+    try { const url = '/company-api/dashboard' + (scope ? '?scope=' + encodeURIComponent(scope) : ''); const d = await getJSON(url); tasks = d.tasks || []; sig += 'T' + JSON.stringify(tasks) } catch (e) { tasks = []; sig += 'T[]' }
     try { tokenData = await getJSON('/company-api/tokens'); sig += 'K' + (tokenData && tokenData.rows ? tokenData.rows.length : 0) } catch (e) { tokenData = null; sig += 'K0' }
     try { const a = await getJSON('/company-api/agents'); agentEntries = (a.entries || []).slice().reverse(); agentTotal = a.total || agentEntries.length; sig += 'A' + agentTotal + ':' + agentEntries.length } catch (e) { agentEntries = []; agentTotal = 0; sig += 'A0' }
     // 数据无变化不重绘（消除 4s 轮询整块重建造成的闪动）
     if (sig !== refreshSig) { refreshSig = sig; render() }
+    // 会话清单 + 自动识别当前对话框
+    try { const sl = await getJSON('/company-api/sessions'); if (Array.isArray(sl)) { sessions = sl; autoScope(); renderScopeOptions() } } catch (e) {}
+  }
+  function autoScope() {
+    if (scopeChosen) return
+    let title = null
+    try { const sel = document.querySelector('.pqeL5W_sessionRow.pqeL5W_selected .pqeL5W_title'); if (sel && sel.textContent) title = sel.textContent.trim() } catch (e) {}
+    if (!title) return
+    for (const s of sessions) {
+      if (s.title === title && scope !== s.sessionId) { scope = s.sessionId; refreshSig = ''; refreshAll(); return }
+    }
+  }
+  function renderScopeOptions() {
+    if (!scopeSel) return
+    const val = scope || ''
+    let html = '<option value="">🏢 全部</option>'
+    sessions.forEach(function (s) { html += '<option value="' + (s.sessionId || '') + '"' + (val === s.sessionId ? ' selected' : '') + '>📂 ' + (s.title || String(s.sessionId || '').slice(0, 8)) + ' · ' + s.taskCount + '</option>' })
+    scopeSel.innerHTML = html
   }
   async function act(taskId, action) {
     try { await getJSON('/company-api/action?taskId=' + encodeURIComponent(taskId) + '&action=' + encodeURIComponent(action)) } catch (e) {}

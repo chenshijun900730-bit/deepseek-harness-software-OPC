@@ -221,6 +221,7 @@ export default {
           if (!s || s.taskId !== e.name) continue
           out.push({
             taskId: s.taskId, project: p, mode: s.mode,
+            sessionId: s.sessionId || null,
             type: s.classification ? s.classification.type : 'unknown',
             requirement: String(s.requirement || '').slice(0, 120),
             status: s.status, currentSprint: s.currentSprint || null,
@@ -234,6 +235,57 @@ export default {
       }
       out.sort(function (a, b) { return String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')) })
       return out
+    }
+    // 会话清单：任务按创建会话分组（标题/目录/任务数），供面板与画布做「每个对话框一个 Company」隔离
+    let sessionsCache = { at: 0, rows: [] }
+    async function sessionsSnapshot() {
+      const nowMs = Date.now()
+      if (nowMs - sessionsCache.at < 30000) return sessionsCache.rows
+      const tasks = await listAllTasks()
+      const sq = ctx.get('sessionQuery')
+      const groups = new Map()
+      for (const t of tasks) {
+        const key = t.sessionId ? 's:' + t.sessionId : 'd:' + t.project
+        const g = groups.get(key) || { sessionId: t.sessionId || null, project: t.project, tasks: 0, taskIds: [] }
+        g.tasks += 1
+        g.taskIds.push(t.taskId)
+        groups.set(key, g)
+      }
+      const rows = []
+      for (const g of groups.values()) {
+        let title = g.sessionId ? String(g.sessionId).slice(0, 8) : '（未归属会话 · 按目录）'
+        let cwd = g.project
+        if (g.sessionId && sq !== undefined) {
+          try {
+            const t = await sq.readTitle(g.sessionId)
+            if (t && typeof t.title === 'string' && t.title) title = t.title
+            const snap = await sq.readSession(g.sessionId)
+            if (snap && snap.header && typeof snap.header.cwd === 'string') cwd = snap.header.cwd
+          } catch (e) {}
+        }
+        rows.push({ sessionId: g.sessionId, title, cwd, taskCount: g.tasks, taskIds: g.taskIds, project: g.project })
+      }
+      rows.sort(function (a, b) { return b.taskCount - a.taskCount })
+      sessionsCache = { at: nowMs, rows }
+      return rows
+    }
+    // 按会话过滤任务：无 sessionId 的旧任务按目录归属（会话 cwd 与任务目录一致即视为该会话的公司）
+    async function scopedTaskIds(scope, taskList) {
+      if (!scope) return null
+      const sessions = await sessionsSnapshot()
+      const s = sessions.find(function (x) { return x.sessionId === scope })
+      const cwd = s ? s.cwd : null
+      const ids = new Set()
+      for (const t of taskList) {
+        if (t.sessionId === scope) ids.add(t.taskId)
+        else if (!t.sessionId && cwd && t.project === cwd) ids.add(t.taskId)
+      }
+      return ids
+    }
+    async function scopedListAllTasks(scope) {
+      const tasks = await listAllTasks()
+      const ids = await scopedTaskIds(scope, tasks)
+      return ids ? tasks.filter(function (t) { return ids.has(t.taskId) }) : tasks
     }
     async function allocTaskId(base) {
       const tasksDir = base + '/.company-harness/tasks'
@@ -828,7 +880,7 @@ export default {
             const p = u.pathname
             const q = u.searchParams
             let out
-            if (p === '/company-api/dashboard') out = { tasks: await listAllTasks() }
+            if (p === '/company-api/dashboard') out = { tasks: await scopedListAllTasks(q.get('scope')) }
             else if (p === '/company-api/task') out = await taskDetail(q.get('taskId'))
             else if (p === '/company-api/tokens') out = await tokensSnapshot()
             else if (p === '/company-api/agents') out = { entries: agentLog.slice(-80), total: agentLog.length }
@@ -836,7 +888,8 @@ export default {
             else if (p === '/company-api/flow') out = await flowSnapshot(q)
             else if (p === '/company-api/contract') out = await contractSnapshot(q)
             else if (p === '/company-api/contracts') out = await contractsSnapshot(q)
-            else if (p === '/company-api/canvas') out = await canvasSnapshot()
+            else if (p === '/company-api/canvas') out = await canvasSnapshot(q)
+            else if (p === '/company-api/sessions') out = await sessionsSnapshot()
             else if (p === '/company-api/action') out = await handleAction(q.get('taskId'), q.get('action'), q)
             else { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return }
             res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
@@ -941,8 +994,15 @@ export default {
       const base = await defaultProjectDir()
       const file = createEventsFile(base + '/.company-harness/events')
       const afterSeq = Number(q.get('seq') || 0)
-      const events = readSince(file, afterSeq)
-      return { events, nextSeq: events.length ? events[events.length - 1].seq : afterSeq }
+      const raw = readSince(file, afterSeq)
+      const nextSeq = raw.length ? raw[raw.length - 1].seq : afterSeq
+      let events = raw
+      const scope = q.get('scope')
+      if (scope) {
+        const ids = await scopedTaskIds(scope, await listAllTasks())
+        if (ids) events = raw.filter(function (ev) { return !ev.taskId || ids.has(ev.taskId) })
+      }
+      return { events, nextSeq }
     }
 
     async function flowSnapshot(q) {
@@ -990,20 +1050,25 @@ export default {
       return { contracts: out }
     }
 
-    async function canvasSnapshot() {
+    async function canvasSnapshot(q) {
+      const scope = q ? q.get('scope') : undefined
       const tokens = await tokensSnapshot().catch(function () { return { rows: [] } })
       const dispatches = await listDispatchRecords()
       const attributed = attributeUsage(tokens.rows || [], dispatches)
-      const depts = aggregateByDepartment(attributed)
+      const allTasks = await listAllTasks()
+      const ids = await scopedTaskIds(scope, allTasks)
+      const tasks = ids ? allTasks.filter(function (t) { return ids.has(t.taskId) }) : allTasks
+      // 会话隔离：部门聚合/活跃部门/调用明细/总量都只算该会话任务归属的部分
+      const scopedAttributed = ids ? attributed.filter(function (a) { return !a.taskId || ids.has(a.taskId) }) : attributed
+      const depts = aggregateByDepartment(scopedAttributed)
       // 部门档案并入（模型/reasoning/中文名），画布抽屉与悬停卡直接展示
       for (const k of Object.keys(depts)) {
         const role = ROLES[k]
         if (role) { depts[k].model = role.model; depts[k].reasoning = role.reasoning; depts[k].title = role.title }
       }
-      const tasks = await listAllTasks()
       // 每个任务当前活跃的派工部门（子代理已启动/在跑，状态机尚未推进时画布也点亮对应节点）
       const activeByTask = new Map()
-      for (const a of attributed) {
+      for (const a of scopedAttributed) {
         if (!a.taskId || !a.department) continue
         const set = activeByTask.get(a.taskId) || new Set()
         set.add(a.department)
@@ -1017,6 +1082,7 @@ export default {
       const callList = []
       for (const d of dispatches) {
         if (!d.department || !d.sessionId) continue
+        if (ids && d.taskId && !ids.has(d.taskId)) continue
         const row = tokenById.get(d.sessionId)
         callList.push({
           dept: d.department, taskId: d.taskId || null, at: d.at || d.ts || null,
@@ -1032,7 +1098,7 @@ export default {
         tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
         depts, dispatchDepts, roles, dispatches: callList.slice(-60),
         // 总量只算本项目派工记录归属的 token（与画布部门徽标同口径，跨项目会话不计入）
-        totalTokens: attributed.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        totalTokens: scopedAttributed.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
         concurrency: CONCURRENCY.limit || 3,
         at: now(),
       }
@@ -1280,8 +1346,12 @@ export default {
         team = teamFor('complex')
         if (type === 'small') { type = 'medium'; cls.forcedUpgrade = true }
       }
+      // 记录创建会话：面板/画布按「每个对话框一个 Company」做会话级隔离
+      let creatingSessionId = null
+      try { const sess = callSession(); if (sess && sess.id) creatingSessionId = String(sess.id) } catch (e) {}
       const state = {
         schema: 1, taskId, projectDir: base, requirement, mode,
+        sessionId: creatingSessionId,
         createdAt: now(), updatedAt: now(),
         status: 'INTAKE', pausedFrom: null,
         classification: {
