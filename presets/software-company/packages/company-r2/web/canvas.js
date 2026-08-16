@@ -277,6 +277,8 @@
     var contractsSig = (STATE.contracts || []).map(function (c) { return c.from + '>' + c.to + (c.signed ? '✓' : '') }).join(',')
     return [STATE.focusTask || '', (STATE.dispatches || []).length, (STATE.roles || []).length, deptsSig, doneSig, contractsSig].join('|')
   }
+  var badgePrevTotal = {}
+  var badgePrevSurface = {}
   function updateDeptBadges() {
     ORG.forEach(function (o) {
       var el = $('nd-dept-' + o.id)
@@ -292,6 +294,26 @@
         var stxt = '⇧' + fmt(d.surfaceTokens || 0)
         if (s.textContent !== stxt) s.textContent = stxt
       }
+      // 活跃高亮：token 总量或表面在增长 → 卡片发光 + ⚡ 琥珀色，不再静止灰色
+      var total = d.totalTokens || 0
+      var surf = d.surfaceTokens || 0
+      var growing = (badgePrevTotal[o.id] !== undefined && total > badgePrevTotal[o.id]) ||
+                    (badgePrevSurface[o.id] !== undefined && surf > badgePrevSurface[o.id])
+      if (growing) {
+        el.dataset.glow = '1'
+        el.style.borderColor = '#a78bfa'
+        el.style.boxShadow = '0 0 14px rgba(167,139,250,.6)'
+        if (t) t.style.color = '#fbbf24'
+        if (s) s.style.color = '#7dd3fc'
+      } else if (el.dataset.glow) {
+        delete el.dataset.glow
+        el.style.borderColor = ''
+        el.style.boxShadow = ''
+        if (t) t.style.color = ''
+        if (s) s.style.color = ''
+      }
+      badgePrevTotal[o.id] = total
+      badgePrevSurface[o.id] = surf
     })
   }
   function renderOrg() {
