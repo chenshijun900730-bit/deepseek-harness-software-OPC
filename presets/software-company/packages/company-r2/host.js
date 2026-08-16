@@ -1211,8 +1211,10 @@ export default {
         ])
       } catch (e) { dispatches = null }
       if (dispatches === null) dispatches = []
-      const attributed = attributeUsage(tokens.rows || [], dispatches)
       const allTasks = await listAllTasks()
+      // 公司任务归属的主会话（Coordinator 亲自消耗的 token 计入总控部门）
+      const companySessionIds = new Set(allTasks.map(function (t) { return t.sessionId }).filter(Boolean))
+      const attributed = attributeUsage(tokens.rows || [], dispatches, companySessionIds)
       const ids = await scopedTaskIds(scope, allTasks)
       const tasks = ids ? allTasks.filter(function (t) { return ids.has(t.taskId) }) : allTasks
       // 会话隔离：部门聚合/活跃部门/调用明细/总量都只算该会话任务归属的部分
@@ -1318,7 +1320,7 @@ export default {
       }
       // 2) 落盘 sidecar（按项目；跨重启，读一次日志后永久复用）
       const stored = (await loadDispatchEnrichMap(proj))[sid]
-      if (stored !== undefined && (stored.dept !== undefined || stored.taskId !== undefined)) {
+      if (stored !== undefined && stored.dept !== undefined) {
         dispatchEnrichCache.set(sid, { at: Date.now(), dept: stored.dept, taskId: stored.taskId, prompt: stored.prompt, durationMs: stored.durationMs })
         d.department = stored.dept
         d.taskId = stored.taskId
@@ -1345,9 +1347,9 @@ export default {
               for (const c of e.data.content) {
                 if (c && typeof c.text === 'string') {
                   if (!prompt && c.text.length > 40) prompt = c.text
-                  const m = c.text.match(/软件公司 Harness 中的\s*\**([^*\n]+)\**/)
+                  const m = c.text.match(/软件公司 Harness\s*(?:中)?的\s*\*{1,2}([^*\n]{2,40})\*{1,2}/)
                   if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
-                  const t = c.text.match(/(?:（任务|任务编号[：:])\s*([A-Z][A-Z0-9-]*)/)
+                  const t = c.text.match(/TASK-\d{8}-\d{3}/)
                   if (t && !taskId) taskId = t[1]
                 }
               }
@@ -1372,9 +1374,9 @@ export default {
                 for (const c of e.data.content) {
                   if (c && typeof c.text === 'string') {
                     if (!prompt && c.text.length > 40) prompt = c.text
-                    const m = c.text.match(/软件公司 Harness 中的\s*\**([^*\n]+)\**/)
+                    const m = c.text.match(/软件公司 Harness\s*(?:中)?的\s*\*{1,2}([^*\n]{2,40})\*{1,2}/)
                     if (m && !dept) dept = roleIdOfTitle(String(m[1]).trim())
-                    const t = c.text.match(/(?:（任务|任务编号[：:])\s*([A-Z][A-Z0-9-]*)/)
+                    const t = c.text.match(/TASK-\d{8}-\d{3}/)
                     if (t && !taskId) taskId = t[1]
                   }
                 }
