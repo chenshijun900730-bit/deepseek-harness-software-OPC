@@ -753,7 +753,7 @@
     renderCurrent()
   }
 
-  var tok = { cur: 0, target: 0, started: false, lastTick: 0 }
+  var tok = { cur: 0, target: 0, started: false, lastTick: 0, inited: false }
   var tokSamples = []
   // 分批跳动：每 ~260ms 向 target 迈一个可见批（约 32% 剩余量），数字逐批上跳并闪亮，
   // 流式消耗期间每秒都有可见的「跳动」观感（而非平滑缓动或完成时才跳变）。
@@ -960,6 +960,13 @@
       if (STATE.view === 'org') { spawnTokenChips(); spawnNewCallChips(d.dispatches || []) }
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
+      if (!tok.inited) {
+        // 首屏直接显示真实总量，不再从 0 分批爬升（那会被误读成「token 在增加」）
+        tok.inited = true
+        tok.cur = tok.target
+        var elInit = $('tokTotal'); if (elInit) elInit.textContent = fmtFull(tok.cur)
+        var capInit = $('capTok'); if (capInit) capInit.textContent = fmt(tok.cur)
+      }
       // 表面 token 随流式输出实时增长（低延迟观感）
       var surfEl = $('tokSurface')
       if (surfEl) {
