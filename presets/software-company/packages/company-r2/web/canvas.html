@@ -70,11 +70,7 @@
     <span>⚡ 总量 <b style="color:#f59e0b;" id="tokTotal">1.24M</b> · 今日 +86k ↑
       <svg width="70" height="18" style="vertical-align:middle;"><polyline points="2,15 14,12 26,13 38,8 50,9 62,4" fill="none" stroke="#f59e0b" stroke-width="1.5"/></svg></span>
     <span class="sld">并发上限 <span id="sld2" onclick="setConcurrency(2)">2</span><span id="sld3" class="on" onclick="setConcurrency(3)">3</span><span id="sld4" onclick="setConcurrency(4)">4</span> <span style="color:#6b7280;">(复杂任务默认 2)</span></span>
-    <span id="chips" style="display:contents;">
-      <span class="chip on" data-choice="focus-1" onclick="window.__selectTask('TASK-20260815-001')">TASK-001 待办应用</span>
-      <span class="chip" data-choice="focus-2" onclick="window.__selectTask('TASK-20260815-002')">TASK-002 数据看板</span>
-      <span class="chip" data-choice="focus-3" onclick="window.__selectTask('TASK-20260815-003')">TASK-003 官网 ✅</span>
-    </span>
+    <span id="chips" style="display:contents;"></span>
     <span class="btn amber" onclick="window.openHire()">＋ 招聘部门</span>
     <span class="btn" id="bell" onclick="openApprove()">🔔 1 待批准</span>
   </div>
@@ -125,5 +121,5 @@
   <div class="modal-card" id="modal-card"></div>
 </div>
 
-<script src="/company/static/geometry.js"></script>
+<script type="module" src="/company/static/geometry.js"></script>
 <script src="/company/static/canvas.js"></script>

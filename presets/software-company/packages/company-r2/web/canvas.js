@@ -3,8 +3,12 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { tasks: [], events: [], seq: 0, depts: {}, done: {}, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
+  var STATE = { tasks: [], events: [], seq: 0, depts: {}, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3 }
   var DRAG = null
+  var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
+  function isWorkingNow(n) {
+    return STATE.workingStage === n.id || STATE.started.has(n.id) || (ACTIVE_EXEC.indexOf(STATE.current) >= 0 && STATE.ready.has(n.id))
+  }
 
   var STATUS_STYLE = {
     working: { border: '#a78bfa', bg: '#150b2e', color: '#c4b5fd' },
@@ -42,7 +46,7 @@
     var nodes = flow.nodes.filter(function (n) { return !n.skipped })
     var pos = layout(nodes)
     nodes.forEach(function (n) {
-      var st = STATE.done[n.id] ? 'done' : (STATE.workingStage === n.id ? 'working' : 'queued')
+      var st = STATE.done[n.id] ? 'done' : (isWorkingNow(n) ? 'working' : 'queued')
       var s = STATUS_STYLE[st]
       var el = document.createElement('div')
       el.className = 'nd' + (st === 'working' ? ' work' : '')
@@ -64,7 +68,7 @@
 
   function tipHtml(n) {
     var d = STATE.depts[n.dept] || {}
-    return '<h4>' + (n.title || n.id) + '</h4><div>' + (STATE.done[n.id] ? '✅ 已完成' : (STATE.workingStage === n.id ? '⚙ 工作中' : '⏳ 排队/等待')) + '</div>' +
+    return '<h4>' + (n.title || n.id) + '</h4><div>' + (STATE.done[n.id] ? '✅ 已完成' : (isWorkingNow(n) ? '⚙ 工作中' : '⏳ 排队/等待')) + '</div>' +
       '<div style="color:#9ca3af;margin-top:3px;">部门：' + n.dept + ' · 模型：' + (d.model || '?') + ' · ' + (d.reasoning || '?') + '<br/>token 本轮 ' + fmt(d.totalTokens || 0) + ' · 排名 ' + (d.rank || '-') + '</div>'
   }
 
@@ -236,13 +240,37 @@
     cv.appendChild(el)
   }
 
+  function renderChips() {
+    var chips = $('chips')
+    if (!chips) return
+    var sig = STATE.tasks.map(function (t) { return t.taskId + ':' + t.status }).join('|')
+    if (chips.dataset.sig === sig) return
+    chips.dataset.sig = sig
+    chips.innerHTML = ''
+    var shown = STATE.tasks.slice(0, 6)
+    if (!shown.length) {
+      chips.innerHTML = '<span class="chip">暂无任务（对话中 company_start 启动）</span>'
+      return
+    }
+    shown.forEach(function (t) {
+      var short = t.taskId.replace('TASK-', '').replace(/\d{8}-/, '')
+      var icon = t.status === 'RELEASED' ? '✅ ' : (t.status === 'PAUSED' ? '⏸ ' : (t.status === 'IMPLEMENTING' || t.status === 'QA_RUNNING' ? '⚙ ' : ''))
+      var s = document.createElement('span')
+      s.className = 'chip' + (STATE.focusTask === t.taskId ? ' on' : '')
+      s.textContent = icon + 'TASK-' + short + (t.type ? ' · ' + t.type : '')
+      s.style.cursor = 'pointer'
+      s.addEventListener('click', function () { window.__selectTask(t.taskId) })
+      chips.appendChild(s)
+    })
+  }
+
   function poll() {
     api('/company-api/events?seq=' + STATE.seq).then(function (d) {
       (d.events || []).forEach(function (ev) {
         STATE.seq = ev.seq
         pushEvent(ev)
-        if (ev.type === 'stage.started') STATE.workingStage = ev.stage
-        if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; if (STATE.flow) renderNodes(STATE.flow) }
+        if (ev.type === 'stage.started') { STATE.workingStage = ev.stage; STATE.started.add(ev.stage); if (STATE.flow) renderNodes(STATE.flow) }
+        if (ev.type === 'stage.done') { STATE.done[ev.stage] = { at: ev.ts }; STATE.workingStage = null; STATE.started.delete(ev.stage); if (STATE.flow) renderNodes(STATE.flow) }
         if (ev.type === 'adjudication.started') showAdjNode(ev)
         if (ev.type === 'adjudication.decided') { var a = $('nd-adj'); if (a) a.remove() }
       })
@@ -253,19 +281,26 @@
       STATE.concurrency = d.concurrency || 3
       tok.target = d.totalTokens || 0
       tickTokens()
+      renderChips()
       var fid = STATE.focusTask || (STATE.tasks[0] && STATE.tasks[0].taskId)
       if (fid) {
         api('/company-api/flow?taskId=' + encodeURIComponent(fid)).then(function (f) {
           if (f.legacy) { STATE.flow = null; renderNodes(null); return }
           STATE.flow = f
           STATE.done = f.done || {}
+          STATE.started = new Set(f.started || [])
+          STATE.ready = new Set(f.ready || [])
+          STATE.current = f.current || null
+          if (STATE.workingStage && STATE.started.has(STATE.workingStage) === false) STATE.workingStage = null
           renderNodes(f)
         }).catch(function () {})
       }
     }).catch(function () {})
   }
 
-  window.__selectTask = function (id) { STATE.focusTask = id; poll() }
+  window.__selectTask = function (id) { STATE.focusTask = id; renderChips(); poll() }
+
+  window.resetLayout = function () { if (STATE.flow) renderNodes(STATE.flow) }
 
   window.__openCoord = function () {
     fillPanel('<div style="font-weight:700;color:#fbbf24;padding:6px 10px;">🎯 总控 Coordinator（总监）</div>' +
@@ -312,4 +347,5 @@
       }).catch(function () {})
   }
   window.__closeDoc = function () { $('modal').classList.remove('on') }
+  window.closeDoc = window.__closeDoc
 })()

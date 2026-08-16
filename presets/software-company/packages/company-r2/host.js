@@ -222,6 +222,7 @@ export default {
           out.push({
             taskId: s.taskId, project: p, mode: s.mode,
             type: s.classification ? s.classification.type : 'unknown',
+            requirement: String(s.requirement || '').slice(0, 120),
             status: s.status, currentSprint: s.currentSprint || null,
             sprintsDone: (s.sprints || []).filter(function (x) { return x.status === 'PASSED' }).length,
             sprintTotal: (s.sprints || []).length,
@@ -284,12 +285,59 @@ export default {
       try {
         appendEvent(eventsFileFor(state), { type: 'status', taskId: state.taskId, from, to, reason })
       } catch (e) {}
+      await syncFlowStageEvents(state, to)
       if (to === 'SPRINT_PASSED') {
         try {
           appendEvent(eventsFileFor(state), { type: 'review.pass', taskId: state.taskId, badges: assertionBadges(await deterministicBadgesFrom(state)) })
         } catch (e) {}
       }
       return state
+    }
+
+    // 把状态机推进映射为大画布 DAG 环节事件（stage.started/stage.done），
+    // 并把 done/started 持久化到 RUN_STATE.flow —— 画布节点据此点亮/变绿。
+    // 即使会话未显式调用 company_record_stage，画布也能随状态推进而动。
+    async function syncFlowStageEvents(state, to) {
+      if (!state.flow || !Array.isArray(state.flow.nodes)) return
+      const nodes = state.flow.nodes
+      const byId = function (id) { return nodes.find(function (n) { return n.id === id }) }
+      const done = new Set(Object.keys(state.flow.done || {}))
+      const started = new Set(state.flow.started || [])
+      let changed = false
+      const start = function (n) {
+        if (!n || n.skipped || done.has(n.id) || started.has(n.id)) return
+        started.add(n.id); changed = true
+        appendEvent(eventsFileFor(state), { type: 'stage.started', taskId: state.taskId, stage: n.id })
+      }
+      const complete = function (n) {
+        if (!n || n.skipped || done.has(n.id)) return
+        done.add(n.id); changed = true
+        appendEvent(eventsFileFor(state), { type: 'stage.done', taskId: state.taskId, stage: n.id })
+      }
+      const ready = function () { return readyNodes(state.flow, done) }
+      if (to === 'CONTRACT_SIGNED') {
+        // 合同冻结 = 规划/调研/架构环节完成
+        nodes.forEach(function (n) { if (['planner', 'architect', 'explorer'].indexOf(n.dept) >= 0) complete(n) })
+      } else if (to === 'IMPLEMENTING') {
+        ready().forEach(function (id) { start(byId(id)) })
+      } else if (to === 'SELF_CHECK' || to === 'INTEGRATING') {
+        nodes.forEach(function (n) { if (IMPLEMENTATION_ROLES.indexOf(n.dept) >= 0) complete(n) })
+      } else if (to === 'QA_RUNNING') {
+        nodes.forEach(function (n) { if (IMPLEMENTATION_ROLES.indexOf(n.dept) >= 0) complete(n) })
+        ready().forEach(function (id) { start(byId(id)) })
+      } else if (to === 'SPRINT_PASSED') {
+        nodes.forEach(function (n) { if (['sprint-evaluator', 'qa-runner'].indexOf(n.dept) >= 0) complete(n) })
+      } else if (to === 'FINAL_E2E') {
+        ready().forEach(function (id) { start(byId(id)) })
+      } else if (to === 'RELEASED') {
+        nodes.forEach(function (n) { complete(n) })
+      }
+      if (changed) {
+        const prevDone = state.flow.done || {}
+        state.flow.done = Object.fromEntries([...done].map(function (x) { return [x, prevDone[x] || { at: now() }] }))
+        state.flow.started = [...started]
+        await saveState(state)
+      }
     }
 
     function parseClaims(md) {
@@ -757,7 +805,7 @@ export default {
       ctx.effect(() => sp.section({
         name: 'company-protocol',
         order: 300,
-        text: '## 软件公司 Harness 协议（本会话必须遵守）\n\n所有软件变更请求必须走公司流程：用 company_start 建立任务（mode: company/auto/forced-full/plan-only；纯解释请求不启动）。\n\n- 需求在编码前变成明确、有限、可验收的范围（PRODUCT_SPEC.md + SPRINT_PLAN.md，Planner 负责）。\n- 每轮一个可控功能块，完成标准在编码前冻结于 SPRINT_CONTRACT.md（小型任务由 Coordinator 冻结且 deterministicCoverage 必须为 true，否则先 company_reclassify 提升为中型；中型+由 Sprint Evaluator 在 CONTRACT_REVIEW 后签署）。冻结后 Generator 不得修改验收标准。\n- 中型/复杂/高风险：编码者与验收者必须相互独立（H-08：Generator 不得签发判定，Evaluator 不得参与编码）；小型任务仅当全部标准可被确定性自动测试完整验证时走 Generator+确定性门禁。\n- 多部门并行写入必须先在 WORK_OWNERSHIP.md 声明互不重叠的所有权（重叠即 OWNERSHIP_CONFLICT）；共享表面（锁文件/迁移/CI/部署/令牌/生成文件）仅 Integrator 串行修改。\n- 任何 FAIL 直接路由全新 Repair Generator（deepseek-v4-pro/high）：两次定点修复 → 一次重新规划 → 再失败暂停并提交证据给用户（H-09/H-10）。\n- 角色库模型约束：coordinator=deepseek-v4-pro/max；planner/architect/generator/department-generator/integrator/sprint-evaluator/final-evaluator/security-reviewer/repair-generator=deepseek-v4-pro/high；explorer/qa-runner=deepseek-v4-flash/medium、mechanical-worker/recorder=deepseek-v4-flash/low（company_record_role 硬校验）。\n- 聊天不是交接依据：状态、交接、证据全部签入 .company-harness/tasks/<TASK>/ 文件；新上下文用 company_get_task 恢复（H-11）。\n- 成本护栏：COST_LEDGER.md 只记真实可获得用量，缺省记「不可获得」，禁止估算。\n- 批准门禁：公司模式在用户批准前不得进入编码（H-03）；自动模式必须把可逆低风险假设写入 DECISIONS.md，高风险任务（支付/权限/隐私/删除/迁移等）即使自动模式也强制等待批准（H-04）。',
+        text: '## 软件公司 Harness 协议（本会话必须遵守）\n\n所有软件变更请求必须走公司流程：用 company_start 建立任务（mode: company/auto/forced-full/plan-only；纯解释请求不启动）。\n\n- 需求在编码前变成明确、有限、可验收的范围（PRODUCT_SPEC.md + SPRINT_PLAN.md，Planner 负责）。\n- 每轮一个可控功能块，完成标准在编码前冻结于 SPRINT_CONTRACT.md（小型任务由 Coordinator 冻结且 deterministicCoverage 必须为 true，否则先 company_reclassify 提升为中型；中型+由 Sprint Evaluator 在 CONTRACT_REVIEW 后签署）。冻结后 Generator 不得修改验收标准。\n- 中型/复杂/高风险：编码者与验收者必须相互独立（H-08：Generator 不得签发判定，Evaluator 不得参与编码）；小型任务仅当全部标准可被确定性自动测试完整验证时走 Generator+确定性门禁。\n- 多部门并行写入必须先在 WORK_OWNERSHIP.md 声明互不重叠的所有权（重叠即 OWNERSHIP_CONFLICT）；共享表面（锁文件/迁移/CI/部署/令牌/生成文件）仅 Integrator 串行修改。\n- 任何 FAIL 直接路由全新 Repair Generator（deepseek-v4-pro/high）：两次定点修复 → 一次重新规划 → 再失败暂停并提交证据给用户（H-09/H-10）。\n- 角色库模型约束：coordinator=deepseek-v4-pro/max；planner/architect/generator/department-generator/integrator/sprint-evaluator/final-evaluator/security-reviewer/repair-generator=deepseek-v4-pro/high；explorer/qa-runner=deepseek-v4-flash/medium、mechanical-worker/recorder=deepseek-v4-flash/low（company_record_role 硬校验）。\n- 聊天不是交接依据：状态、交接、证据全部签入 .company-harness/tasks/<TASK>/ 文件；新上下文用 company_get_task 恢复（H-11）。\n- 大画布环节登记：派工开始用 company_record_stage(status=started)，环节验收通过后用 company_record_stage(status=done, refs=[证据])（状态机推进时引擎也会自动补发 stage 事件并写回 flow.done/started）。\n- 成本护栏：COST_LEDGER.md 只记真实可获得用量，缺省记「不可获得」，禁止估算。\n- 批准门禁：公司模式在用户批准前不得进入编码（H-03）；自动模式必须把可逆低风险假设写入 DECISIONS.md，高风险任务（支付/权限/隐私/删除/迁移等）即使自动模式也强制等待批准（H-04）。',
       }))
     }
 
@@ -897,10 +945,15 @@ export default {
       const state = await loadTask(q.get('taskId'))
       if (!state) return { error: '任务不存在' }
       if (!state.flow) return { legacy: true, stages: STAGES_LEGACY, current: state.status }
-      const done = state.flow.done || {}
+      const storedDone = state.flow.done || {}
+      // 已发布任务：全部未跳过环节视为完成（旧任务可能从未写 flow.done）
+      const done = state.status === 'RELEASED'
+        ? Object.fromEntries(state.flow.nodes.filter(function (n) { return !n.skipped }).map(function (n) { return [n.id, storedDone[n.id] || { at: state.updatedAt }] }))
+        : storedDone
       return {
         legacy: false, nodes: state.flow.nodes, adjustments: state.flow.adjustments,
-        done, ready: readyNodes(state.flow, new Set(Object.keys(done))),
+        done, started: state.flow.started || [],
+        ready: readyNodes(state.flow, new Set(Object.keys(done))),
         current: state.status,
       }
     }
@@ -1625,6 +1678,44 @@ export default {
       if (!changed) return { ok: true, plan: [], note: '本 Sprint 全部环节已就绪完毕或已完成' }
       appendEvent(eventsFileFor(state), { type: 'sprint.plan', taskId: state.taskId, stages: plan.map((p) => p.stage) })
       return { ok: true, plan, note: '按顺序派工；可并行的环节用 run_in_background 同时派，遵守并发上限（复杂/高风险 2，其他 3）。' }
+    })
+
+    tool('company_record_stage', '登记 DAG 环节状态（总监大画布据此点亮/变绿节点）：派工开始时 status=started；环节验收通过后 status=done（依赖环节必须已 done；refs 至少 1 项证据）。写回 RUN_STATE.flow.done/started 并发 stage.started/stage.done 事件。', {
+      taskId: S('任务编号'),
+      stage: S('环节节点 id（company_get_task → flow.nodes[].id）'),
+      status: SE('状态', ['started', 'done']),
+      refs: SA('证据 refs（done 时必填，至少 1 项）'),
+    }, ['taskId', 'stage', 'status'], async function (args) {
+      const state = await loadTask(args.taskId)
+      if (!state) return { ok: false, error: '任务不存在：' + args.taskId }
+      if (!state.flow) return { ok: false, error: '旧任务无 DAG 流程' }
+      const nodes = state.flow.nodes || []
+      const node = nodes.find(function (n) { return n.id === args.stage })
+      if (!node) return { ok: false, error: '环节不存在：' + args.stage + '；可选: ' + nodes.map(function (n) { return n.id }).join(', ') }
+      if (node.skipped) return { ok: false, error: '环节 ' + args.stage + ' 已被 skip' }
+      const done = new Set(Object.keys(state.flow.done || {}))
+      const started = new Set(state.flow.started || [])
+      if (args.status === 'started') {
+        if (done.has(args.stage)) return { ok: false, error: '环节 ' + args.stage + ' 已完成，不能再 started' }
+        if (started.has(args.stage)) return { ok: true, stage: args.stage, status: 'started', note: '已登记，无需重复' }
+        started.add(args.stage)
+        state.flow.started = [...started]
+        await saveState(state)
+        appendEvent(eventsFileFor(state), { type: 'stage.started', taskId: state.taskId, stage: args.stage })
+        return { ok: true, stage: args.stage, status: 'started' }
+      }
+      const missing = (node.needs || []).filter(function (x) {
+        const dep = nodes.find(function (n) { return n.id === x })
+        return !done.has(x) && !(dep && dep.skipped)
+      })
+      if (missing.length) return { ok: false, error: '依赖环节未完成: ' + missing.join(', ') + '；先登记它们 done' }
+      if (!Array.isArray(args.refs) || args.refs.length === 0) return { ok: false, error: 'done 必须携带 refs（至少 1 项证据）' }
+      done.add(args.stage)
+      state.flow.done = { ...(state.flow.done || {}), [args.stage]: { at: now(), refs: args.refs } }
+      state.flow.started = [...started]
+      await saveState(state)
+      appendEvent(eventsFileFor(state), { type: 'stage.done', taskId: state.taskId, stage: args.stage, refs: args.refs })
+      return { ok: true, stage: args.stage, status: 'done', done: [...done] }
     })
 
     tool('company_hire_department', '招聘新部门：创建 company-dept-<id> preset 并注册进角色库。id=[a-z0-9-]{2,32}；model=deepseek-v4-pro|deepseek-v4-flash；reasoning=low|medium|high；tools 可选 bash/fs/search/jobs/subagent/web/ask/todo。新部门无 company_* 引擎工具（护栏）。', {
