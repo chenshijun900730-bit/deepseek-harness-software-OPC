@@ -1,5 +1,11 @@
 # 软件公司 Harness v2 · 总监可视化串并联开发模式 Implementation Plan
 
+> **执行偏差记录（2026-08-16）**：
+> 1. `company_run_sprint` v1 实现为「批量派工计划生成」（不 host 直派子代理）：subagents 服务契约 `start(name, request)` 需要 live parent Agent，host 侧直派风险高，实际派工仍由 Coordinator 按计划用 subagent 工具执行（可并行）。host 直派留作 P3 增强项。
+> 2. `adjudicate` v1 为降级路径：发 `adjudication.started` 事件 + 返回裁决指引，由 Coordinator 下一回合以 max reasoning 子代理裁决后经 `company_decide` 写回。
+> 3. Task 6 测试期望修正：cubicMid t=0.5 的 y 期望 7.5（标准三次贝塞尔公式），非 5。
+> 4. 测试脚本 glob：Node 23 需 `node --test tests/*.test.js`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把 `software-company` preset 从「线性黑箱流水线」升级为「串并联可视化公司」：DAG 流程引擎 + 事件流 + 交接契约 + 总监大画布（可拖动/悬停/审批/决策）+ 招聘部门，并落地五刀 token 优化。

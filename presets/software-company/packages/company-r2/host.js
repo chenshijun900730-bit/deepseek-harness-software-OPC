@@ -800,6 +800,34 @@ export default {
       }
     }
 
+    // ================= 总监大画布页（/company） =================
+    const webDir = new URL('./web/', import.meta.url).pathname
+    try {
+      ctx.effect(() => webServer.register({
+        kind: 'exact',
+        path: '/company',
+        handler: async function (req, res) {
+          const html = await readTextAt(webDir + 'canvas.html')
+          if (html === undefined) { res.writeHead(404); res.end('canvas.html missing'); return }
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' })
+          res.end(html)
+        },
+      }))
+      ctx.effect(() => webServer.register({
+        kind: 'prefix',
+        path: '/company/static',
+        handler: async function (req, res) {
+          const p = new URL(req.url || '/', 'http://x').pathname.replace('/company/static/', '')
+          if (!/^[a-zA-Z0-9_.-]+$/.test(p)) { res.writeHead(400); res.end('bad path'); return }
+          const text = await readTextAt(webDir + p)
+          if (text === undefined) { res.writeHead(404); res.end('not found'); return }
+          const type = p.endsWith('.js') ? 'text/javascript; charset=utf-8' : (p.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/plain; charset=utf-8')
+          res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' })
+          res.end(text)
+        },
+      }))
+    } catch (e) { /* 多实例复用首实例路由 */ }
+
     function ensureDir(dir) { try { nodeFs.mkdirSync(dir, { recursive: true }) } catch (e) {} }
     function renameDir(a, b) { nodeFs.renameSync(a, b) }
 

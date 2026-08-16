@@ -54,6 +54,10 @@
   const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
   pill.addEventListener('click', function () { open = true; render() })
 
+  const canvasLink = el('a', { pointerEvents: 'auto', cursor: 'pointer', background: '#f59e0b', color: '#0b0f19', border: '1px solid #f59e0b', borderRadius: '22px', padding: '10px 14px', fontSize: '13px', fontWeight: '700', textDecoration: 'none', boxShadow: '0 4px 16px rgba(0,0,0,.35)' }, '\u{1F5FA} 总监大画布')
+  canvasLink.setAttribute('href', '/company')
+  canvasLink.setAttribute('target', '_blank')
+
   const panelSize = { w: 640, h: null }
   const panel = el('div', { width: panelSize.w + 'px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#111827', border: '1px solid #374151', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)', overflow: 'hidden', position: 'relative' })
   const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #1f2937' })
@@ -140,7 +144,13 @@
   // ---------- 渲染 ----------
   function render() {
     root.innerHTML = ''
-    if (!open) { root.appendChild(pill); return }
+    if (!open) {
+      const wrap = el('div', { display: 'flex', gap: '8px', alignItems: 'center' })
+      wrap.appendChild(pill)
+      wrap.appendChild(canvasLink)
+      root.appendChild(wrap)
+      return
+    }
     tabs.innerHTML = ''
     tabs.appendChild(tabBtn('tasks', '\u{1F5D3} 任务'))
     tabs.appendChild(tabBtn('tokens', '\u26A1 Tokens'))
