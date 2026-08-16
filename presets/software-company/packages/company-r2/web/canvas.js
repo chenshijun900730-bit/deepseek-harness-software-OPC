@@ -4,6 +4,11 @@
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
   var STATE = { view: 'org', tasks: [], events: [], since: '', seenKeys: new Set(), depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
+  // 独立窗口模式：面板「⧉ 独立窗口」弹出时带当前 scope（?scope=sessionId）
+  try {
+    var qsScope = new URLSearchParams(window.location.search).get('scope')
+    if (qsScope) STATE.scope = qsScope
+  } catch (e) {}
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {

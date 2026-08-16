@@ -63,7 +63,30 @@
   let sessions = []
 
   const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
-  pill.addEventListener('click', function () { open = true; render() })
+  let pillMoved = false
+  pill.addEventListener('pointerdown', function (e) {
+    pillMoved = false
+    const sx = e.clientX, sy = e.clientY
+    const r = root.getBoundingClientRect()
+    const dx = e.clientX - r.left, dy = e.clientY - r.top
+    function onMove(ev) {
+      if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 4) pillMoved = true
+      if (pillMoved) {
+        root.style.right = 'auto'
+        root.style.left = Math.round(ev.clientX - dx) + 'px'
+        root.style.top = Math.round(ev.clientY - dy) + 'px'
+      }
+    }
+    function onUp() {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  })
+  pill.addEventListener('click', function () { if (pillMoved) return; open = true; render() })
 
   // 默认即最大：贴近视口的宽高，四边 + 右下角可拖拽缩放
   function maxPanelSize() {
@@ -86,8 +109,45 @@
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
   closeBtn.addEventListener('click', function () { open = false; render() })
-  headerBtns.appendChild(scopeSel); headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
+  const popoutBtn = el('button', btnStyle('#7dd3fc'), '\u29C9 \u72EC\u7ACB\u7A97\u53E3')
+  popoutBtn.title = '把总监大画布弹出为独立窗口（可随意拖动，不局限在浏览器内）'
+  popoutBtn.addEventListener('click', function () {
+    try {
+      const w = window.open('/company' + (scope ? '?scope=' + encodeURIComponent(scope) : ''), 'company-canvas-popout', 'width=1520,height=880,popup=yes')
+      if (w) w.focus()
+    } catch (e) {}
+  })
+  headerBtns.appendChild(scopeSel); headerBtns.appendChild(popoutBtn); headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
   header.appendChild(title); header.appendChild(headerBtns)
+
+  // ================= 面板整体可随意拖动（标题栏按住即拖，无边界限制） =================
+  const moveDrag = { active: false }
+  header.addEventListener('pointerdown', function (e) {
+    if (e.target && e.target.closest && (e.target.closest('button') || e.target.closest('select'))) return
+    e.preventDefault()
+    try { header.setPointerCapture(e.pointerId) } catch (err) {}
+    const r = root.getBoundingClientRect()
+    moveDrag.active = true
+    moveDrag.dx = e.clientX - r.left
+    moveDrag.dy = e.clientY - r.top
+    function onMove(ev) {
+      root.style.right = 'auto'
+      const x = Math.round(ev.clientX - moveDrag.dx)
+      const y = Math.round(ev.clientY - moveDrag.dy)
+      root.style.left = x + 'px'
+      root.style.top = y + 'px'
+      panelTop = y
+    }
+    function onUp() {
+      moveDrag.active = false
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  })
 
   // 画布区（任务选项卡上方）：iframe 复用 /company 页；收起时卸载停轮询，展开时重新挂载
   const canvasWrap = el('div', { display: 'none', flex: 'none', borderBottom: '1px solid #1f2937', background: '#0b0f19' })
