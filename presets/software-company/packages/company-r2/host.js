@@ -835,6 +835,7 @@ export default {
             else if (p === '/company-api/events') out = await eventsSnapshot(q)
             else if (p === '/company-api/flow') out = await flowSnapshot(q)
             else if (p === '/company-api/contract') out = await contractSnapshot(q)
+            else if (p === '/company-api/contracts') out = await contractsSnapshot(q)
             else if (p === '/company-api/canvas') out = await canvasSnapshot()
             else if (p === '/company-api/action') out = await handleAction(q.get('taskId'), q.get('action'), q)
             else { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return }
@@ -967,6 +968,26 @@ export default {
       const file = contractsDirOf(state) + '/' + q.get('from') + '__' + q.get('to') + '.md'
       const markdown = await readTextAt(file)
       return markdown === undefined ? { error: '契约不存在' } : { markdown }
+    }
+
+    // 任务的全部交接文件清单（from/to 为环节 id，画布侧映射到部门显示）
+    async function contractsSnapshot(q) {
+      const state = await loadTask(q.get('taskId'))
+      if (!state) return { error: '任务不存在' }
+      const dir = contractsDirOf(state)
+      const t = await fsService.resolve(dir)
+      const info = await fsService.stat(t)
+      if (!info || info.type !== 'directory') return { contracts: [] }
+      const entries = await fsService.listDir(t)
+      const out = []
+      for (const e of entries) {
+        if (e.type !== 'file' || !/\.md$/.test(e.name)) continue
+        const m = e.name.match(/^(.+)__(.+)\.md$/)
+        if (!m) continue
+        const text = await readTextAt(dir + '/' + e.name)
+        out.push({ from: m[1], to: m[2], signed: /签收|签署|signed/i.test(text || '') })
+      }
+      return { contracts: out }
     }
 
     async function canvasSnapshot() {

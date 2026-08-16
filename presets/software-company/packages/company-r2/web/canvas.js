@@ -3,7 +3,7 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
+  var STATE = { view: 'org', tasks: [], events: [], seq: 0, depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
@@ -221,7 +221,9 @@
   }
   function orgSignature() {
     var deptsSig = Object.keys(STATE.depts || {}).map(function (k) { return k + ':' + Math.round((STATE.depts[k].totalTokens || 0) / 1000) }).join(',')
-    return [STATE.focusTask || '', (STATE.dispatches || []).length, (STATE.roles || []).length, deptsSig].join('|')
+    var doneSig = Object.keys(STATE.done || {}).join(',')
+    var contractsSig = (STATE.contracts || []).map(function (c) { return c.from + '>' + c.to + (c.signed ? '✓' : '') }).join(',')
+    return [STATE.focusTask || '', (STATE.dispatches || []).length, (STATE.roles || []).length, deptsSig, doneSig, contractsSig].join('|')
   }
   function updateDeptBadges() {
     ORG.forEach(function (o) {
@@ -252,34 +254,45 @@
     STATE.orgSig = sig
     cv.querySelectorAll('.nd').forEach(function (el) { if (el.id !== 'nd-coord') el.remove() })
     cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
+    cv.querySelectorAll('.cicon').forEach(function (el) { el.remove() })
     var coord = $('nd-coord'); if (coord) coord.style.display = 'none'
     var ph = $('nd-placeholder'); if (ph) ph.remove()
     var names = {}
     ;(STATE.roles || []).forEach(function (r) { names[r.id] = r })
+    // 聚焦任务各环节的部门归属与完结统计（环节全部完结的部门标绿）
+    var flowDepts = {}, doneDepts = {}
+    ;(STATE.flowNodes || []).forEach(function (n) {
+      flowDepts[n.dept] = (flowDepts[n.dept] || 0) + 1
+      if (STATE.done[n.id]) doneDepts[n.dept] = (doneDepts[n.dept] || 0) + 1
+    })
     var nodes = ORG.filter(function (o) { return true })
     nodes.forEach(function (o) {
       var r = roleOf(o.id)
       var calls = deptCalls(o.id)
       var d = STATE.depts[o.id] || {}
-      var st = o.id === 'coordinator' ? 'working' : (calls.length ? 'working' : 'idle')
+      var allDone = flowDepts[o.id] && doneDepts[o.id] === flowDepts[o.id]
+      var st = o.id === 'coordinator' ? 'working' : (allDone ? 'done' : (calls.length ? 'working' : 'idle'))
       var s = STATUS_STYLE[st]
       var el = document.createElement('div')
       el.className = 'nd' + (st === 'working' ? ' work' : '')
       el.id = 'nd-dept-' + o.id
       el.style.cssText = 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w + 'px;border-color:' + s.border + ';background:' + s.bg + ';color:' + s.color
       var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
-      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + toks + '</small>'
+      var doneNote = allDone ? ' · ✅' : (doneDepts[o.id] ? ' · ✅' + doneDepts[o.id] + '/' + flowDepts[o.id] : '')
+      el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + doneNote + toks + '</small>'
       el.addEventListener('click', function () { if (justMoved) return; openOrgDept(o.id) })
       el.addEventListener('pointerdown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
         showTip(ev, '<h4>🏢 ' + (r.title || o.id) + '</h4><div style="color:#9ca3af;">模型：' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
-          '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) + '<br/>点击查看调用记录</div>', el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
+          '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) +
+          '<br/>环节 ' + (doneDepts[o.id] || 0) + '/' + (flowDepts[o.id] || 0) + ' 完结' + (allDone ? '（全部完结 ✅）' : '') + '<br/>点击查看调用记录</div>', el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
       })
       el.addEventListener('mouseleave', window.hideTip)
       cv.appendChild(el)
     })
     renderOrgEdges()
     renderCallCards()
+    renderContractIcons()
   }
   function renderOrgEdges() {
     var svg = $('edges')
@@ -341,6 +354,54 @@
         more.addEventListener('click', function () { openOrgDept(dept) })
         cv.appendChild(more)
       }
+    })
+  }
+  // 交接契约：rail 列表 + 组织视图部门连线上的 📄 图标
+  function renderContractRows() {
+    var list = $('docList')
+    if (!list) return
+    var contracts = STATE.contracts || []
+    if (!contracts.length) {
+      if (list.dataset.sig !== 'empty') {
+        list.dataset.sig = 'empty'
+        list.innerHTML = '<div class="doc-row" style="color:#4b5563;cursor:default;">暂无交接文件（环节派工会生成 📄 交接契约）</div>'
+      }
+      return
+    }
+    var sig = contracts.map(function (c) { return c.from + '>' + c.to + (c.signed ? '✓' : '') }).join(',')
+    if (list.dataset.sig === sig) return
+    list.dataset.sig = sig
+    list.innerHTML = ''
+    contracts.forEach(function (c) {
+      var row = document.createElement('div')
+      row.className = 'doc-row'
+      row.innerHTML = '📄 ' + c.from + ' → ' + c.to + (c.signed ? ' <span class="ok">✓已签</span>' : ' <span style="color:#f59e0b;">待签</span>')
+      row.addEventListener('click', function () { window.openDoc(STATE.focusTask, c.from, c.to) })
+      list.appendChild(row)
+    })
+  }
+  function renderContractIcons() {
+    cv.querySelectorAll('.cicon').forEach(function (el) { el.remove() })
+    var deptOf = {}
+    ;(STATE.flowNodes || []).forEach(function (n) { deptOf[n.id] = n.dept })
+    ;(STATE.contracts || []).forEach(function (c) {
+      var a = deptOf[c.from], b = deptOf[c.to]
+      if (!a || !b) return
+      var na = $('nd-dept-' + a), nb = $('nd-dept-' + b)
+      if (!na || !nb) return
+      var x, y
+      if (a === b) { x = na.offsetLeft + na.offsetWidth / 2 - 8; y = na.offsetTop - 30 }
+      else {
+        x = (na.offsetLeft + na.offsetWidth / 2 + nb.offsetLeft + nb.offsetWidth / 2) / 2 - 8
+        y = (na.offsetTop + na.offsetHeight / 2 + nb.offsetTop + nb.offsetHeight / 2) / 2 - 8
+      }
+      var ic = document.createElement('div')
+      ic.className = 'cicon'
+      ic.style.cssText = 'position:absolute;left:' + Math.round(x) + 'px;top:' + Math.round(y) + 'px;z-index:6;cursor:pointer;font-size:13px;'
+      ic.textContent = c.signed ? '📄' : '📄'
+      ic.title = '交接文件：' + c.from + ' → ' + c.to + (c.signed ? '（已签收）' : '（待签）')
+      ic.addEventListener('click', function () { window.openDoc(STATE.focusTask, c.from, c.to) })
+      cv.appendChild(ic)
     })
   }
   function fmtDur(ms) {
@@ -560,26 +621,38 @@
       // 由 flow 回填兜底（done/started 均已持久化在 RUN_STATE）。
       var fid = STATE.focusTask || (STATE.tasks[0] && STATE.tasks[0].taskId)
       STATE.focusTask = fid
-      if (STATE.view === 'flow' && fid) {
+      if (fid) {
+        // 两个视图都拉 flow：流程视图渲染 DAG；组织视图用它做环节→部门映射
+        // （部门完结标绿）与交接文件图标定位
         api('/company-api/flow?taskId=' + encodeURIComponent(fid)).then(function (f) {
-          if (f.legacy) { STATE.flow = null; renderNodes(null); return }
+          if (f.legacy) { STATE.flow = null; STATE.flowNodes = []; return }
           var fsig = fid + '|' + JSON.stringify([f.done, f.started, f.current])
           STATE.flow = f
+          STATE.flowNodes = f.nodes || []
           STATE.done = f.done || {}
           STATE.started = new Set(f.started || [])
           STATE.ready = new Set(f.ready || [])
           STATE.current = f.current || null
           if (STATE.workingStage && STATE.started.has(STATE.workingStage) === false) STATE.workingStage = null
-          // 流程快照无变化则不重绘（消除每 2s 轮询重建导致的闪动）
-          if (fsig !== STATE.flowSig) { STATE.flowSig = fsig; renderNodes(f) }
+          if (STATE.view === 'flow') {
+            // 流程快照无变化则不重绘（消除每 2s 轮询重建导致的闪动）
+            if (fsig !== STATE.flowSig) { STATE.flowSig = fsig; renderNodes(f) }
+          } else {
+            renderOrg()
+          }
+        }).catch(function () {})
+        api('/company-api/contracts?taskId=' + encodeURIComponent(fid)).then(function (d) {
+          STATE.contracts = (d && d.contracts) || []
+          renderContractRows()
+          if (STATE.view === 'org') renderOrg()
         }).catch(function () {})
       } else {
-        renderOrg()
+        if (STATE.view === 'org') renderOrg()
       }
     }).catch(function () {})
   }
 
-  window.__selectTask = function (id) { STATE.focusTask = id; STATE.orgSig = ''; STATE.flowSig = ''; renderChips(); poll() }
+  window.__selectTask = function (id) { STATE.focusTask = id; STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []; renderChips(); poll() }
 
   window.resetLayout = function () { renderCurrent() }
 
