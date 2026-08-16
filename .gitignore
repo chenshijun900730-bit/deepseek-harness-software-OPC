@@ -1,3 +1,4 @@
 .DS_Store
 .superpowers/
 node_modules/
+.company-harness/agents-log.jsonl

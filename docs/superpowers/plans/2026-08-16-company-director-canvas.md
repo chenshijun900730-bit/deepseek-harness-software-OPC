@@ -634,7 +634,7 @@ test('lerp 线性插值', () => {
 test('cubicMid t=0.5 加权中点', () => {
   const m = cubicMid({ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 10 }, { x: 10, y: 0 }, 0.5)
   assert.equal(m.x, 5)
-  assert.equal(m.y, 5)
+  assert.equal(m.y, 7.5)
 })
 
 test('edgePath 直线与贝塞尔', () => {
@@ -689,7 +689,7 @@ git commit -m "feat(canvas): 连线/贝塞尔中点/线性插值共用数学模�
 
 - [ ] **Step 1: 编辑**
 
-在 `"main": "./host.js",` 之前插入 `"scripts": { "test": "node --test tests/" },`
+在 `"main": "./host.js",` 之前插入 `"scripts": { "test": "node --test tests/*.test.js" },`
 
 - [ ] **Step 2: 运行全部单测**
 
