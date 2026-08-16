@@ -58,7 +58,7 @@
       var toks = STATE.depts[n.dept] ? ' · ⚡ ' + fmt(STATE.depts[n.dept].totalTokens) : ''
       el.innerHTML = (st === 'done' ? '✅ ' : (st === 'working' ? '⚙ ' : '⏳ ')) + (n.title || n.id) + '<small>' + n.dept + toks + '</small>'
       el.addEventListener('click', function () { if (justMoved) return; openDept(n) })
-      el.addEventListener('mousedown', startDrag)
+      el.addEventListener('pointerdown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
         var r = cv.getBoundingClientRect()
         showTip(ev, tipHtml(n), el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
@@ -259,7 +259,7 @@
       var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
       el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + (calls.length ? ' · 调用×' + calls.length : '') + toks + '</small>'
       el.addEventListener('click', function () { if (justMoved) return; openOrgDept(o.id) })
-      el.addEventListener('mousedown', startDrag)
+      el.addEventListener('pointerdown', startDrag)
       el.addEventListener('mouseenter', function (ev) {
         showTip(ev, '<h4>🏢 ' + (r.title || o.id) + '</h4><div style="color:#9ca3af;">模型：' + (r.model || '?') + ' · ' + (r.reasoning || '?') +
           '<br/>聚焦任务调用 ' + calls.length + ' 次 · 部门 token 累计 ' + fmt(d.totalTokens || 0) + '<br/>点击查看调用记录</div>', el.offsetLeft + el.offsetWidth + 14, el.offsetTop)
@@ -380,12 +380,46 @@
     if (STATE.view === 'flow') { if (STATE.flow) renderNodes(STATE.flow) } else { renderOrg() }
   }
 
+  // ================= 画布平移：拖空白区域滚动（指针捕获，拖出边界不中断） =================
+  var PAN = null
+  var scrollWrap = $('canvasScroll')
+  if (scrollWrap) {
+    scrollWrap.addEventListener('pointerdown', function (e) {
+      if (e.button !== undefined && e.button !== 0) return
+      var t = e.target
+      if (t && t.closest && (t.closest('.nd') || t.closest('.call') || t.closest('.btn') || t.closest('input') || t.closest('select'))) return
+      e.preventDefault()
+      try { scrollWrap.setPointerCapture(e.pointerId) } catch (err) {}
+      PAN = { x: e.clientX, y: e.clientY, sx: scrollWrap.scrollLeft, sy: scrollWrap.scrollTop }
+      scrollWrap.style.cursor = 'grabbing'
+    })
+    scrollWrap.addEventListener('pointermove', function (e) {
+      if (!PAN) return
+      scrollWrap.scrollLeft = PAN.sx - (e.clientX - PAN.x)
+      scrollWrap.scrollTop = PAN.sy - (e.clientY - PAN.y)
+    })
+    function endPan(e) {
+      if (!PAN) return
+      PAN = null
+      scrollWrap.style.cursor = ''
+      try { if (e && e.pointerId !== undefined && scrollWrap.releasePointerCapture) scrollWrap.releasePointerCapture(e.pointerId) } catch (err) {}
+    }
+    scrollWrap.addEventListener('pointerup', endPan)
+    scrollWrap.addEventListener('pointercancel', endPan)
+  }
+
   var justMoved = false
+  // 节点拖拽用 Pointer Events + setPointerCapture：指针拖出节点/iframe/面板边界后
+  // 事件仍持续路由给起始节点（鼠标事件的 iframe 截断问题不再影响拖拽）
   function startDrag(e) {
+    if (e.button !== undefined && e.button !== 0) return
     e.preventDefault()
-    DRAG = { el: e.currentTarget, dx: e.clientX - e.currentTarget.offsetLeft, dy: e.clientY - e.currentTarget.offsetTop, moved: false, org: e.currentTarget.id.indexOf('nd-dept-') === 0 }
-    document.addEventListener('mousemove', onDrag)
-    document.addEventListener('mouseup', endDrag)
+    var el = e.currentTarget
+    try { el.setPointerCapture(e.pointerId) } catch (err) {}
+    DRAG = { el: el, dx: e.clientX - el.offsetLeft, dy: e.clientY - el.offsetTop, moved: false, org: el.id.indexOf('nd-dept-') === 0 }
+    document.addEventListener('pointermove', onDrag)
+    document.addEventListener('pointerup', endDrag)
+    document.addEventListener('pointercancel', endDrag)
   }
   function onDrag(e) {
     if (!DRAG) return
@@ -405,11 +439,13 @@
       renderEdges(STATE.flow)
     }
   }
-  function endDrag() {
+  function endDrag(e) {
     if (DRAG && DRAG.moved) { justMoved = true; setTimeout(function () { justMoved = false }, 0) }
+    try { if (e && e.pointerId !== undefined && DRAG && DRAG.el.releasePointerCapture) DRAG.el.releasePointerCapture(e.pointerId) } catch (err) {}
     DRAG = null
-    document.removeEventListener('mousemove', onDrag)
-    document.removeEventListener('mouseup', endDrag)
+    document.removeEventListener('pointermove', onDrag)
+    document.removeEventListener('pointerup', endDrag)
+    document.removeEventListener('pointercancel', endDrag)
   }
 
   var tok = { cur: 0, target: 0, started: false }

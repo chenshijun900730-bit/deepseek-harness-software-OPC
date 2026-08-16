@@ -96,6 +96,7 @@
   function mountCanvas(mount) {
     if (mount) {
       canvasWrap.style.display = 'block'
+      canvasFrame.style.pointerEvents = 'auto' // 兜底：任何异常路径下画布都可交互
       if (canvasFrame.getAttribute('src') !== '/company') canvasFrame.setAttribute('src', '/company')
       syncCanvasHeight()
     } else {
@@ -130,6 +131,8 @@
   let panelTop = 12
   function startResize(e, mode) {
     e.preventDefault()
+    const h = e.currentTarget
+    try { h.setPointerCapture(e.pointerId) } catch (err) {}
     // 拖拽期间 iframe 对鼠标事件穿透：否则拖进画布区域后 mousemove 会被 iframe 文档吞掉
     canvasFrame.style.pointerEvents = 'none'
     const x0 = e.clientX, y0 = e.clientY, w0 = panelSize.w, h0 = panelSize.h, t0 = panelTop
@@ -148,14 +151,21 @@
       panelSize.w = c.w; panelSize.h = c.h
       applySize()
     }
-    function onUp() { canvasFrame.style.pointerEvents = 'auto'; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    function onUp(e) {
+      canvasFrame.style.pointerEvents = 'auto'
+      try { if (e && e.pointerId !== undefined && h.releasePointerCapture) h.releasePointerCapture(e.pointerId) } catch (err) {}
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
   function edgeHandle(cursor, mode) {
     const h = el('div', { position: 'absolute', zIndex: '12', background: 'transparent' })
     h.style.cursor = cursor
-    h.addEventListener('mousedown', function (e) { startResize(e, mode) })
+    h.addEventListener('pointerdown', function (e) { startResize(e, mode) })
     return h
   }
   const edgeLeft = edgeHandle('ew-resize', 'w')
@@ -177,7 +187,7 @@
   gripPath.setAttribute('stroke', '#4b5563'); gripPath.setAttribute('stroke-width', '1.5'); gripPath.setAttribute('fill', 'none')
   gripSvg.appendChild(gripPath)
   grip.appendChild(gripSvg)
-  grip.addEventListener('mousedown', function (e) { startResize(e, 'se') })
+  grip.addEventListener('pointerdown', function (e) { startResize(e, 'se') })
   panel.appendChild(grip)
   applySize()
 
