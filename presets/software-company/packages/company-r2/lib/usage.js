@@ -33,3 +33,29 @@ export function aggregateByDepartment(attributed, taskId) {
   list.forEach((v, i) => { v.rank = i + 1 })
   return Object.fromEntries(list.map((v) => [v.department, v]))
 }
+
+// 按 scope 过滤归属行：子代理行按 taskKey(project\taskId) 命中；
+// 主会话行（taskId 为 null）按 sessionId 命中（本会话任务的主会话）。
+export function filterAttributedByScope(attributed, taskKeys, sessionIds) {
+  const out = []
+  for (const a of attributed || []) {
+    if (a.taskId && taskKeys.has(a.project + '\u0000' + a.taskId)) out.push(a)
+    else if (!a.taskId && sessionIds.has(a.sessionId)) out.push(a)
+  }
+  return out
+}
+
+// 派工记录的「被调用过」口径：部门 → 调用次数（counts）与有调用的部门列表（depts）。
+export function everCallCountsOf(dispatches) {
+  const counts = {}
+  for (const d of dispatches || []) {
+    if (!d.department) continue
+    counts[d.department] = (counts[d.department] || 0) + 1
+  }
+  return { counts, depts: Object.keys(counts) }
+}
+
+// 归属行 token 合计（scope 内总消耗口径）。
+export function sumTokens(attributed) {
+  return (attributed || []).reduce((s, a) => s + (a.totalTokens || 0), 0)
+}
