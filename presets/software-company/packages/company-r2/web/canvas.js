@@ -48,7 +48,7 @@
       throw new Error((e && e.name === 'AbortError') ? 'timeout' : String((e && e.message) || e))
     })
   }
-  function fmt(n) { return n >= 1000000 ? (n / 1000000).toFixed(2) + 'M' : (n / 1000).toFixed(1) + 'k' }
+  function fmt(n) { if (!n) return '0'; return n >= 1000000 ? (n / 1000000).toFixed(2) + 'M' : (n / 1000).toFixed(1) + 'k' }
   function fmtFull(n) { return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
 
   function updateCapPill() {
