@@ -618,7 +618,7 @@
   }
 
   window.__ModuleLoader__.load({
-    id: '/Users/xiaowanzi/.dsh/.agent-presets/software-company/packages/company-panel',
+    id: 'software-company-panel',
     factory: function () {
       var plugin = { apply: function () { installPanel() } }
       return { apply: plugin.apply, default: plugin }

@@ -2,3 +2,7 @@
 .superpowers/
 node_modules/
 .company-harness/agents-log.jsonl
+.company-harness/tasks/
+.company-harness/events/
+.company-harness/dispatches.jsonl
+.company-harness/dispatch-enrich.json

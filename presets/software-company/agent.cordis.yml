@@ -263,4 +263,4 @@
 # 面板（任务进度/子代理日志/Token 实时消耗），由 clientModules 按 dsh.client
 # 清单自动下发。
 - id: company-harness
-  name: /Users/xiaowanzi/.dsh/.agent-presets/software-company/packages/company-r2
+  name: ./packages/company-r2
