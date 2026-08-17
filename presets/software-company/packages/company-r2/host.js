@@ -324,7 +324,7 @@ export default {
             if (t) title = t
           } catch (e) {}
         }
-        rows.push({ sessionId: g.sessionId, title, cwd, taskCount: g.tasks, taskIds: g.taskIds, project: g.project })
+        rows.push({ sessionId: g.sessionId, title, cwd, taskCount: g.tasks, taskIds: g.taskIds, project: g.project, live: meta ? !!meta.live : false })
       }
       rows.sort(function (a, b) { return b.taskCount - a.taskCount })
       sessionsCache = { at: nowMs, rows }
