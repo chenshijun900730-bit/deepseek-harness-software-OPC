@@ -15,7 +15,16 @@ export default {
     const sandboxPolicy = ctx.get('sandboxPolicy')
 
     // ================= 角色库（单一来源：preset 根 roles/roles.json；reasoning 已按五刀④分档） =================
-    const ROLES_FILE = new URL('../../roles/roles.json', import.meta.url).pathname
+    // DSH ≥ 0.1.0-rc.6 加载器不穿透符号链接：裸包名挂载时 import.meta.url 停在
+    // node_modules 链接路径，'../../roles/roles.json' 会解析到不存在的目录。
+    // 先 realpath 本包目录再定位；目录不可达时回退原始解析（行为等同修复前）。
+    const ROLES_FILE = (function () {
+      const naive = new URL('../../roles/roles.json', import.meta.url).pathname
+      try {
+        const here = nodeFs.realpathSync(new URL('.', import.meta.url))
+        return nodeFs.realpathSync(here + '/../../roles/roles.json')
+      } catch (e) { return naive }
+    })()
     const ROLES_FALLBACK = {
       'coordinator': { id: 'coordinator', title: 'Coordinator 项目总控', model: 'deepseek-v4-pro', reasoning: 'max', duties: '分类、组队、派工、状态推进、冲突裁决、暂停与升级', forbidden: '不直接编码；不替 QA 放行' },
       'generator': { id: 'generator', title: '主程序员 Generator', model: 'deepseek-v4-pro', reasoning: 'high', duties: '实现策略、核心代码、自检、协调部门程序员', forbidden: '不修改验收结论；不批准自己' },
@@ -1007,7 +1016,13 @@ export default {
     }
 
     // ================= 总监大画布页（/company） =================
+    // 符号链接布局下 realpath 本包目录再定位 web/（与 ROLES_FILE 同因；多数场景
+    // /company 由 company-panel 宿主平面注册，此处为兜底注册，故失败时静默回退）
     let webDir = new URL('./web/', import.meta.url).pathname
+    try {
+      const here = nodeFs.realpathSync(new URL('.', import.meta.url))
+      webDir = nodeFs.realpathSync(here + '/web') + '/'
+    } catch (e) { /* 目录不可达时回退原始解析，行为等同修复前 */ }
     try {
       // rc.6 加载器不穿透符号链接：整包被 ln -s 安装时 import.meta.url 停在链接路径，
       // 先 realpath 本包目录再定位 web/（目录不存在时回退原路径，行为等同修复前）。
