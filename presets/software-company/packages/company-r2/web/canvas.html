@@ -16,7 +16,7 @@
       --shadow-card:0 4px 16px rgba(15,23,42,.10); --shadow-pop:0 8px 24px rgba(15,23,42,.18);
     }
   }
-  .app { width:1712px; background:var(--bg-app); border:1px solid var(--border); border-radius:14px; overflow:hidden;
+  .app { position:relative; width:1712px; background:var(--bg-app); border:1px solid var(--border); border-radius:14px; overflow:hidden;
          font-family:system-ui,sans-serif; color:var(--text); }
   .cap-strip { display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--bg-panel); border-bottom:1px solid var(--border); font-size:12px; }
   .cap-pill { background:var(--bg-panel); color:var(--text); border:1px solid var(--border-strong); border-radius:22px; padding:8px 16px;
@@ -84,20 +84,33 @@
   .next-edge.step1 { animation: nextPulse 1.4s infinite; }
   .next-edge.step2 { animation: nextPulse 2.2s infinite; }
   @keyframes nextPulse { 0%,100% { stroke-opacity: 1; } 50% { stroke-opacity: .3; } }
+  .boot-overlay { position:absolute; inset:0; background:#0b0f19; z-index:90; display:flex; flex-direction:column;
+                  align-items:center; justify-content:center; gap:14px; transition:opacity .5s ease; }
+  .boot-logo { font-size:44px; animation:bootBreath 1.6s ease-in-out infinite; }
+  @keyframes bootBreath { 0%,100% { transform:scale(1); opacity:.75; } 50% { transform:scale(1.12); opacity:1; } }
+  .boot-title { font-size:13px; color:#9ca3af; letter-spacing:1px; }
+  .boot-skel { border-radius:5px; background:#1f2937; animation:bootPulse 1.6s ease-in-out infinite; }
+  @keyframes bootPulse { 0%,100% { opacity:.2; } 50% { opacity:.55; } }
 </style>
 
 <div id="canvasScroll" style="overflow-x:auto;overflow-y:auto;">
 <div class="app">
+  <div class="boot-overlay" id="bootOverlay">
+    <div class="boot-logo">🏢</div>
+    <div class="boot-title">公司启动中 · 正在定位当前会话…</div>
+    <div class="boot-skel" style="width:520px;height:10px;"></div>
+    <div class="boot-skel" style="width:380px;height:10px;"></div>
+    <div class="boot-skel" style="width:300px;height:10px;"></div>
+  </div>
   <div class="cap-strip">
-    <span class="cap-pill">🏢 Company · 3 项目 · ⚙ 2 工作中 · ⚡ <span id="capTok">1.24M</span> · <span style="color:#f87171;">🔴 1</span></span>
+    <span class="cap-pill">🏢 Company · <span id="capProjects">-</span> 项目 · ⚙ <span id="capWorking">-</span> 工作中 · ⚡ <span id="capTok">-</span></span>
     <span class="cap-note">← DSH 界面右上角浮动胶囊 · 点击进入下方全屏画布页 /company</span>
   </div>
 
   <div class="bar" style="flex-direction:column;align-items:stretch;gap:0;">
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
       <span style="font-weight:700;color:#f59e0b;">🏢 软件公司 · 总监控制台</span>
-      <span>⚡ 总量 <b style="color:#f59e0b;" id="tokTotal">1.24M</b> · ⇧ 表面 <b style="color:#7dd3fc;" id="tokSurface" title="上下文表面：随流式输出实时增长">-</b> · 近1分 <b style="color:#86efac;" id="tokDelta" title="最近 60 秒 token 增量">+0</b> · 今日 +86k ↑
-        <svg width="70" height="18" style="vertical-align:middle;"><polyline points="2,15 14,12 26,13 38,8 50,9 62,4" fill="none" stroke="#f59e0b" stroke-width="1.5"/></svg></span>
+      <span>⚡ 总量 <b style="color:#f59e0b;" id="tokTotal">-</b> · ⇧ 表面 <b style="color:#7dd3fc;" id="tokSurface" title="上下文表面：随流式输出实时增长">-</b> · 近1分 <b style="color:#86efac;" id="tokDelta" title="最近 60 秒 token 增量">+0</b></span>
       <span class="sld">并发上限 <span id="sld2" onclick="setConcurrency(2)">2</span><span id="sld3" class="on" onclick="setConcurrency(3)">3</span><span id="sld4" onclick="setConcurrency(4)">4</span> <span style="color:#6b7280;">(复杂任务默认 2)</span></span>
       <span class="sld">视图 <span id="vOrg" class="on" onclick="window.__setView('org')">🏢 组织</span><span id="vFlow" onclick="window.__setView('flow')">🔀 流程</span></span>
       <span class="btn amber" onclick="window.openHire()">＋ 招聘部门</span>
@@ -115,6 +128,10 @@
     请在会话模式选择器中切换到 <b>Software Company 公司模式</b>（或打开一个公司会话），画布会每 2s 自动重试并开始拉取真实数据。
   </div>
 
+  <div id="emptyHint" style="display:none;margin:10px 16px 0;padding:12px 16px;background:#111827;border:1px dashed #374151;border-radius:10px;font-size:12px;color:#9ca3af;">
+    🏢 新公司 · 还没有会话（在对话里选 Software Company 模式并 company_start 后自动聚焦）
+  </div>
+
   <div class="main">
     <div class="cv" id="cv">
       <svg id="edges" width="1376" height="560" style="position:absolute;left:0;top:0;">
@@ -125,7 +142,7 @@
       </svg>
 
       <div class="nd" id="nd-coord" style="left:430px;top:14px;width:200px;border-color:#f59e0b;background:#1a1408;color:#fbbf24;" onclick="window.__openCoord()">🎯 总控 Coordinator（总监）<small>常驻 · 派工 / 监督 / 裁决</small></div>
-      <div id="nd-placeholder" style="position:absolute;left:230px;top:200px;color:#6b7280;font-size:12px;">🏢 组织视图：公司 14 个职能部门全量连线；每调用一次某部门，就在其底卡上方叠加一张调用卡。顶部 chip 选择任务，点部门看调用记录。</div>
+      <div id="nd-placeholder" style="position:absolute;left:230px;top:200px;color:#6b7280;font-size:12px;">🏢 新公司 · 还没有会话（在对话里选 Software Company 模式并 company_start 后自动聚焦）</div>
 
       <div class="cv-tip" id="tip"></div>
     </div>
