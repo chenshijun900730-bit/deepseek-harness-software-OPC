@@ -4,6 +4,9 @@
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
   var STATE = { view: 'org', tasks: [], events: [], since: '', seenKeys: new Set(), depts: {}, dispatchDepts: {}, roles: [], dispatches: [], everCalledDepts: [], everCallCounts: {}, contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
+  var BOOT = { phase: 'booting', minUntil: Date.now() + 1200, hardUntil: Date.now() + 2500, scopeResolved: false }
+  var EMPTY = false
+  var ACTIVE_STATUSES = ['CLASSIFIED', 'DISCOVERY', 'PRODUCT_PLANNED', 'WAITING_INITIAL_APPROVAL', 'SPRINT_DRAFTING', 'CONTRACT_REVIEW', 'CONTRACT_SIGNED', 'IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'SPRINT_PASSED', 'REPAIRING', 'REPLANNING', 'FINAL_E2E', 'PAUSED']
   // 独立窗口模式：面板「⧉ 独立窗口」弹出时带当前 scope（?scope=sessionId）
   try {
     var qsScope = new URLSearchParams(window.location.search).get('scope')
@@ -47,6 +50,13 @@
   }
   function fmt(n) { return n >= 1000000 ? (n / 1000000).toFixed(2) + 'M' : (n / 1000).toFixed(1) + 'k' }
   function fmtFull(n) { return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
+
+  function updateCapPill() {
+    var p = $('capProjects')
+    if (p) p.textContent = String((STATE.tasks || []).length)
+    var w = $('capWorking')
+    if (w) w.textContent = String((STATE.tasks || []).filter(function (t) { return ACTIVE_STATUSES.indexOf(t.status) >= 0 }).length)
+  }
 
   // ================= 引擎不可用提示 =================
   // /company-api 由 Software Company 预置（按会话挂载）注册；仅宿主面板常驻。
@@ -264,9 +274,25 @@
     { id: 'recorder', x: 1010, y: 340, w: 170, chain: 'repair-generator' },
     { id: 'repair-generator', x: 1010, y: 450, w: 170 },
   ]
+  var ROLE_FALLBACK = {
+    'coordinator': { id: 'coordinator', title: 'Coordinator 项目总控', model: 'deepseek-v4-pro', reasoning: 'max' },
+    'planner': { id: 'planner', title: 'Planner 产品经理', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'architect': { id: 'architect', title: '架构负责人', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'generator': { id: 'generator', title: '主程序员 Generator', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'department-generator': { id: 'department-generator', title: '部门程序员', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'integrator': { id: 'integrator', title: 'Integrator 集成负责人', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'sprint-evaluator': { id: 'sprint-evaluator', title: 'Sprint Evaluator', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'final-evaluator': { id: 'final-evaluator', title: '最终验收负责人', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'security-reviewer': { id: 'security-reviewer', title: '安全/数据迁移评审', model: 'deepseek-v4-pro', reasoning: 'high' },
+    'explorer': { id: 'explorer', title: 'Explorer 调查员', model: 'deepseek-v4-flash', reasoning: 'medium' },
+    'qa-runner': { id: 'qa-runner', title: 'QA 执行员', model: 'deepseek-v4-flash', reasoning: 'medium' },
+    'mechanical-worker': { id: 'mechanical-worker', title: 'Mechanical Worker', model: 'deepseek-v4-flash', reasoning: 'low' },
+    'recorder': { id: 'recorder', title: 'Recorder 项目秘书', model: 'deepseek-v4-flash', reasoning: 'low' },
+    'repair-generator': { id: 'repair-generator', title: 'Repair Generator', model: 'deepseek-v4-pro', reasoning: 'high' },
+  }
   function roleOf(id) {
     for (var i = 0; i < (STATE.roles || []).length; i++) if (STATE.roles[i].id === id) return STATE.roles[i]
-    return { id: id, title: id, model: '?', reasoning: '?' }
+    return ROLE_FALLBACK[id] || { id: id, title: id, model: '?', reasoning: '?' }
   }
   function deptCalls(id) {
     return (STATE.dispatches || []).filter(function (d) { return d.dept === id && (!STATE.focusTask || d.taskId === STATE.focusTask) })
@@ -876,6 +902,7 @@
     var evl = $('evList'); if (evl) evl.innerHTML = ''
   }
   window.__selectScope = function (id) {
+    if (EMPTY) { EMPTY = false; var eh = $('emptyHint'); if (eh) eh.style.display = 'none' }
     STATE.scope = id || null
     STATE.scopeChosen = true
     STATE.focusTask = null
@@ -908,6 +935,15 @@
     return false
   }
 
+  // 兜底：没有任何父窗口信号时，聚焦会话清单里最近的存活会话（taskCount 大者优先）
+  function resolveBootScope(sessions) {
+    var live = (sessions || []).filter(function (s) { return s.live })
+    if (!live.length) return false
+    live.sort(function (a, b) { return (b.taskCount || 0) - (a.taskCount || 0) })
+    STATE.scope = live[0].sessionId
+    return true
+  }
+
   // ================= 面板（父窗口）即时 scope 切换 =================
   // 面板侧栏自动跟随 / 手动选择都会 postMessage：画布立即切换，不等轮询；
   // auto=false（面板手动选择）保持锁定，auto=true（跟随侧栏）解除锁定。
@@ -916,6 +952,7 @@
     if (ev.source !== window.parent) return
     var sid = ev.data.sessionId || null
     if (sid === STATE.scope) return
+    if (EMPTY) { EMPTY = false; var ehh = $('emptyHint'); if (ehh) ehh.style.display = 'none' }
     STATE.scope = sid
     STATE.scopeChosen = !ev.data.auto
     if (!ev.data.auto) lastParentTitle = detectParentSessionTitle()
@@ -926,7 +963,34 @@
     poll()
   })
 
+  function refreshSessions() {
+    api('/company-api/sessions').then(function (d) {
+      STATE.sessions = Array.isArray(d) ? d : []
+      if (BOOT.phase === 'booting') {
+        if (STATE.scope === null) {
+          if (autoDetectScope(STATE.sessions)) BOOT.scopeResolved = true
+          else if (resolveBootScope(STATE.sessions)) BOOT.scopeResolved = true
+          else EMPTY = true
+        } else BOOT.scopeResolved = true
+      } else if (EMPTY) {
+        // 空态等待第一个公司会话出现：自动聚焦并恢复数据渲染
+        var live = STATE.sessions.filter(function (s) { return s.live })
+        if (live.length) {
+          EMPTY = false
+          STATE.scope = live[0].sessionId
+          STATE.scopeChosen = false
+          var h = $('emptyHint'); if (h) h.style.display = 'none'
+          resetEventCursor()
+        }
+      }
+      var changed = autoDetectScope(STATE.sessions)
+      renderScopeChips()
+      if (BOOT.phase === 'ready' && changed && !EMPTY) poll()
+      finishBootIfReady()
+    }).catch(function () { finishBootIfReady() })
+  }
   function poll() {
+    if (EMPTY) { refreshSessions(); return }
     api('/company-api/events?since=' + encodeURIComponent(STATE.since) + scopeQuery()).then(function (d) {
       (d.events || []).forEach(function (ev) {
         var key = ev._key || ((ev.project || '') + '#' + ev.seq)
@@ -991,6 +1055,7 @@
         deltaEl.style.color = dv > 0 ? '#86efac' : (dv < 0 ? '#fca5a5' : '#6b7280')
       }
       renderChips()
+      updateCapPill()
       // 聚焦任务在画布数据到达后才确定：首个轮询周期的环节事件可能已按上面规则跳过，
       // 由 flow 回填兜底（done/started 均已持久化在 RUN_STATE）。
       var fid = STATE.focusTask || (STATE.tasks[0] && STATE.tasks[0].taskId)
@@ -1033,18 +1098,27 @@
       if (window.console) console.warn('[company-canvas] 数据接口异常：', msg)
     })
     }
-    // 会话清单 + 自动识别当前对话框（每个对话框一个 Company）
-    api('/company-api/sessions').then(function (d) {
-      STATE.sessions = Array.isArray(d) ? d : []
-      var changed = autoDetectScope(STATE.sessions)
-      renderScopeChips()
-      if (changed) poll()
-    }).catch(function () {})
+    refreshSessions()
   }
 
   window.__selectTask = function (id) { STATE.focusTask = id; STATE.orgSig = ''; STATE.flowSig = ''; STATE.contracts = []; renderChips(); poll() }
 
   window.resetLayout = function () { renderCurrent() }
+
+  function finishBootIfReady() {
+    if (BOOT.phase !== 'booting') return
+    var nowT = Date.now()
+    if (!(nowT >= BOOT.minUntil && (BOOT.scopeResolved || EMPTY || nowT >= BOOT.hardUntil))) return
+    BOOT.phase = 'ready'
+    var ov = $('bootOverlay')
+    if (ov) { ov.style.opacity = '0'; setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov) }, 500) }
+    if (EMPTY) {
+      var h = $('emptyHint'); if (h) h.style.display = 'block'
+      renderChips(); updateCapPill(); renderOrg()
+    }
+    poll()
+    setInterval(poll, 1000)
+  }
 
   window.__openCoord = function () {
     fillPanel('<div style="font-weight:700;color:#fbbf24;padding:6px 10px;">🎯 总控 Coordinator（总监）</div>' +
@@ -1079,8 +1153,9 @@
       .catch(function (e) { $('hireMsg').textContent = '❌ ' + e.message })
   }
 
-  setInterval(poll, 1000)
-  poll()
+  BOOT.scopeResolved = STATE.scope !== null
+  refreshSessions()
+  setInterval(function () { if (BOOT.phase === 'booting') finishBootIfReady() }, 100)
 
   window.openDoc = function (taskId, from, to) {
     api('/company-api/contract?taskId=' + encodeURIComponent(taskId || '') + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to))
