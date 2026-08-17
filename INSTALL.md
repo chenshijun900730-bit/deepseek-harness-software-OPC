@@ -59,16 +59,23 @@ agent-presets:
 
 ## 迁移：company-panel 宿主面挂载
 
-company-panel 以裸包名挂载到宿主 web profile。编辑 `~/.dsh/profiles/web/cordis.patch.yml`，把 company-panel 行的 `name` 由旧的绝对路径改为裸包名 `software-company-panel`（新增条目同理）：
+company-panel 与 company-r2 都以裸包名挂载，靠宿主 web profile 的 node_modules 符号链接解析：
+
+1. 编辑 `~/.dsh/profiles/web/cordis.patch.yml`，把 company-panel 行的 `name` 由旧的绝对路径改为裸包名 `software-company-panel`（新增条目同理）：
 
 ```yaml
 name: software-company-panel
 ```
 
-再为宿主 web profile 的 node_modules 建符号链接：
+2. 为宿主 web profile 的 node_modules 建符号链接（两个都要）：
 
 ```bash
 ln -s ~/.dsh/.agent-presets/software-company/packages/company-panel ~/.dsh/profiles/web/node_modules/software-company-panel
+ln -s ~/.dsh/.agent-presets/software-company/packages/company-r2 ~/.dsh/profiles/web/node_modules/software-company-r2
 ```
+
+> 注意：DSH ≥ 0.1.0-rc.6 的加载器不再支持相对目录导入，preset 行必须以裸包名 +
+> 符号链接的方式挂载（company-r2 缺少第二个符号链接时会话创建直接报
+> `agent-preset-invalid`）。
 
 改完补丁与符号链接后重启 DSH 进程。

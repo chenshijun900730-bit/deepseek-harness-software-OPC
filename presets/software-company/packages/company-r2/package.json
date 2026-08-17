@@ -1,6 +1,6 @@
 {
   "name": "software-company-harness",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "软件公司 Harness：14+1 角色库、任务事实层、状态机、批准门禁、合同冻结、所有权互斥、失败修复硬路由、成本护栏，附流程进度/子代理日志/Token 可视化面板",
   "type": "module",
   "scripts": { "test": "node --test tests/*.test.js" },

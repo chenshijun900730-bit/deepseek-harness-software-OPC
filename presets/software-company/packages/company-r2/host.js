@@ -7,7 +7,9 @@ import { DEPT_ID_RE, validateHire, renderDeptPresetYml, mergeRole, undoRole } fr
 
 export default {
   name: 'software-company-harness',
-  inject: ['fs', 'tools', 'timer'],
+  // webServer 必须进 inject：DSH rc.6 下未声明的 ctx.get('webServer') 返回 undefined，
+  // /company-api 与 /company 路由注册会被整体跳过（rc.5 源码版不要求，故此前未暴露）。
+  inject: ['fs', 'tools', 'timer', 'webServer'],
   apply(ctx) {
     const fsService = ctx.fs
     const sandboxPolicy = ctx.get('sandboxPolicy')
@@ -1005,7 +1007,12 @@ export default {
     }
 
     // ================= 总监大画布页（/company） =================
-    const webDir = new URL('./web/', import.meta.url).pathname
+    let webDir = new URL('./web/', import.meta.url).pathname
+    try {
+      // rc.6 加载器不穿透符号链接：整包被 ln -s 安装时 import.meta.url 停在链接路径，
+      // 先 realpath 本包目录再定位 web/（目录不存在时回退原路径，行为等同修复前）。
+      webDir = nodeFs.realpathSync(new URL('.', import.meta.url)) + '/web/'
+    } catch (e) { /* 保留 import.meta.url 原始解析 */ }
     try {
       ctx.effect(() => webServer.register({
         kind: 'exact',

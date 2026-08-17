@@ -251,11 +251,20 @@
     searchTimeoutMs: 60000
 
 # ── software company harness ────────────────────────────────────────────────
-# 本地包（packages/company-r2）。行名用绝对路径：Host 侧 pathToFileURL 导入，
-# Client 侧 require.resolve 对绝对路径直接生效（裸包名会按主机 profile 的
-# node_modules 解析，不可用）。目录名 r2 是迭代命名（DSH 进程的 ESM 模块缓存
-# 以 URL 为键）：若想改回 software-company，改名目录+此行后需重启 DSH 进程
-# 再开新会话即可（代码内容与目录名无关）。
+# 本地包（packages/company-r2）。行名用裸包名 software-company-r2，配合
+# INSTALL.md「迁移」一节的符号链接（~/.dsh/profiles/web/node_modules/
+# software-company-r2 → 本 preset 的 packages/company-r2）解析：
+# - DSH ≥ 0.1.0-rc.6：相对目录名（如 ./packages/company-r2）被裸 import()，
+#   Node ESM 不支持目录导入，preset 挂载直接失败（session.create 报
+#   agent-preset-invalid）；裸包名走 internal loader 从宿主 profile 的
+#   node_modules 解析（与 company-panel 同一机制），符号链接在即可。
+# - DSH rc.5 源码版：裸包名同样可用（面板即裸包名挂载），目录名才依赖
+#   旧 loader 的 package.json 目录解析。
+# - 客户端清单（dsh.client）按「包名/package.json」定位，裸包名 +
+#   符号链接在两种版本下都能被 require.resolve 找到。
+# 目录名 r2 是迭代命名（DSH 进程的 ESM 模块缓存以 URL 为键）：若想改回
+# software-company，改名目录 + 此行 + 符号链接后需重启 DSH 进程再开新会话
+# 即可（代码内容与目录名无关）。
 # 该行只消费主机面服务（fs/tools/timer/webServer/agents/sessionQuery/
 # tokenMeter/systemPrompt/sandboxPolicy），不发布任何服务，无需 isolate realm。
 # Host 半边注册 15 个 company_* 工具与 /company-api/* 数据路由（多会话挂载
@@ -263,4 +272,4 @@
 # 面板（任务进度/子代理日志/Token 实时消耗），由 clientModules 按 dsh.client
 # 清单自动下发。
 - id: company-harness
-  name: ./packages/company-r2
+  name: software-company-r2

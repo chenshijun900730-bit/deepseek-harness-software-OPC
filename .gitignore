@@ -6,3 +6,4 @@ node_modules/
 .company-harness/events/
 .company-harness/dispatches.jsonl
 .company-harness/dispatch-enrich.json
+.company-harness/registry.json

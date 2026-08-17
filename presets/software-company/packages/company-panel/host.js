@@ -3,9 +3,13 @@
 // 不注册任何 company_* 工具、不注入公司协议段——那些留在 software-company 预置（会话平面）。
 // 与预置内 company-r2 行并存时：/company-api 路由先到先得（预置侧有 try/catch 容忍），
 // 子代理日志采用文件级去重，避免两实例重复写行。
+import nodeFs from 'node:fs'
+
 export default {
   name: 'software-company-panel',
-  inject: ['fs', 'timer'],
+  // webServer 必须进 inject：DSH rc.6 下未声明的 ctx.get('webServer') 返回 undefined，
+  // /company 与 /company/static 路由注册会被整体跳过（rc.5 源码版不要求，故此前未暴露）。
+  inject: ['fs', 'timer', 'webServer'],
   apply(ctx) {
     const fsService = ctx.fs
     const sandboxPolicy = ctx.get('sandboxPolicy')
@@ -359,7 +363,14 @@ export default {
     // （company-r2 侧同名注册会因 duplicate 抛错并被其 try/catch 吞掉，无副作用）。
     const webServer = ctx.get('webServer')
     if (webServer !== undefined) {
-      const webDir = new URL('../company-r2/web/', import.meta.url).pathname
+      // rc.6 加载器不穿透符号链接：本包按 INSTALL.md 以裸包名挂载（node_modules 符号链接）时
+      // import.meta.url 停在 node_modules/software-company-panel，../company-r2/web/ 会解析到
+      // node_modules 下不存在的目录（canvas.html missing）。先 realpath 本包目录再定位。
+      let webDir = new URL('../company-r2/web/', import.meta.url).pathname
+      try {
+        const realHere = nodeFs.realpathSync(new URL('.', import.meta.url))
+        webDir = nodeFs.realpathSync(realHere + '/../company-r2/web') + '/'
+      } catch (e) { /* 目录不可达时回退原始解析，行为等同修复前 */ }
       async function readWebFile(name) {
         if (!/^[a-zA-Z0-9_.-]+$/.test(name)) return undefined
         return await readTextAt(webDir + name)
