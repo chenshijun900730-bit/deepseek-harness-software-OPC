@@ -3,7 +3,7 @@
   'use strict'
   var $ = function (id) { return document.getElementById(id) }
   var cv = $('cv')
-  var STATE = { view: 'org', tasks: [], events: [], since: '', seenKeys: new Set(), depts: {}, dispatchDepts: {}, roles: [], dispatches: [], contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
+  var STATE = { view: 'org', tasks: [], events: [], since: '', seenKeys: new Set(), depts: {}, dispatchDepts: {}, roles: [], dispatches: [], everCalledDepts: [], everCallCounts: {}, contracts: [], flowNodes: [], sessions: [], scope: null, scopeChosen: false, done: {}, started: new Set(), ready: new Set(), current: null, flow: null, focusTask: null, workingStage: null, concurrency: 3, orgSig: '', flowSig: '' }
   // 独立窗口模式：面板「⧉ 独立窗口」弹出时带当前 scope（?scope=sessionId）
   try {
     var qsScope = new URLSearchParams(window.location.search).get('scope')
@@ -275,7 +275,7 @@
     var deptsSig = Object.keys(STATE.depts || {}).map(function (k) { return k + ':' + Math.round((STATE.depts[k].totalTokens || 0) / 1000) }).join(',')
     var doneSig = Object.keys(STATE.done || {}).join(',')
     var contractsSig = (STATE.contracts || []).map(function (c) { return c.from + '>' + c.to + (c.signed ? '✓' : '') }).join(',')
-    return [STATE.focusTask || '', (STATE.dispatches || []).length, (STATE.roles || []).length, deptsSig, doneSig, contractsSig].join('|')
+    return [STATE.focusTask || '', (STATE.dispatches || []).length, (STATE.roles || []).length, deptsSig, doneSig, contractsSig, STATE.everCalledDepts.join(',')].join('|')
   }
   var badgePrevTotal = {}
   var badgePrevSurface = {}
@@ -374,7 +374,7 @@
       var allDone = flowDepts[o.id] && doneDepts[o.id] === flowDepts[o.id]
       // 状态色：活跃(紫) / 环节全完(绿) / 被调用过但当前未活跃(蓝·待命) / 从未调用(灰)。
       // 以前「调用过但暂停」的部门会因焦点任务过滤而落灰；现在凡有历史调用即显示蓝色待命。
-      var everCalled = calls.length > 0 || (STATE.dispatches || []).some(function (dd) { return dd.dept === o.id })
+      var everCalled = calls.length > 0 || STATE.everCalledDepts.indexOf(o.id) >= 0
       var st = o.id === 'coordinator' ? 'working' : (allDone ? 'done' : (calls.length ? 'working' : (everCalled ? 'queued' : 'idle')))
       var s = STATUS_STYLE[st]
       var el = document.createElement('div')
@@ -384,7 +384,7 @@
       var toks = d.totalTokens ? ' · <span class="dtok">⚡' + fmt(d.totalTokens) + '</span>' : ' · <span class="dtok">⚡0</span>'
       var surfs = ' · <span class="dsurf" title="上下文表面：随流式输出实时增长">⇧' + fmt(d.surfaceTokens || 0) + '</span>'
       var doneNote = allDone ? ' · ✅' : (doneDepts[o.id] ? ' · ✅' + doneDepts[o.id] + '/' + flowDepts[o.id] : '')
-      var totalCalls = calls.length || (STATE.dispatches || []).filter(function (dd) { return dd.dept === o.id }).length
+      var totalCalls = calls.length || STATE.everCallCounts[o.id] || 0
       var stateNote = (st === 'queued') ? ' · 待命 · 调用×' + totalCalls : (calls.length ? ' · 调用×' + calls.length : '')
       el.innerHTML = (o.id === 'coordinator' ? '🎯 ' : '🏢 ') + (r.title || o.id) + '<small>' + r.model + ' · ' + (r.reasoning || '?') + stateNote + doneNote + toks + surfs + '</small>'
       el.addEventListener('click', function () { if (justMoved) return; openOrgDept(o.id) })
@@ -466,10 +466,8 @@
   }
   function renderCallCards() {
     cv.querySelectorAll('.call').forEach(function (el) { el.remove() })
-    var fid = STATE.focusTask
     var byDept = {}
     ;(STATE.dispatches || []).forEach(function (d) {
-      if (fid && d.taskId !== fid) return
       ;(byDept[d.dept] = byDept[d.dept] || []).push(d)
     })
     Object.keys(byDept).forEach(function (dept) {
@@ -961,6 +959,8 @@
       STATE.dispatchDepts = d.dispatchDepts || {}
       STATE.roles = d.roles || []
       STATE.dispatches = d.dispatches || []
+      STATE.everCalledDepts = d.everCalledDepts || []
+      STATE.everCallCounts = d.everCallCounts || {}
       // 变化浮层：Token 增长与新调用各浮现一张淡出卡片
       if (STATE.view === 'org') { spawnTokenChips(); spawnNewCallChips(d.dispatches || []) }
       STATE.concurrency = d.concurrency || 3

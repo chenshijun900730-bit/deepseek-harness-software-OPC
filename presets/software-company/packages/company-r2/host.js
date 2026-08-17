@@ -1241,6 +1241,14 @@ export default {
         ])
       } catch (e) { dispatches = null }
       if (dispatches === null) dispatches = []
+      // 全时全项目「被调用过」口径：在 scope 过滤之前基于全量 dispatches 统计，
+      // 供画布「蓝色待命」状态与「调用×N」计数使用（不受 scope 与 60 条窗口影响）。
+      const everCallCounts = {}
+      for (const d of dispatches) {
+        if (!d.department) continue
+        everCallCounts[d.department] = (everCallCounts[d.department] || 0) + 1
+      }
+      const everCalledDepts = Object.keys(everCallCounts)
       const allTasks = await listAllTasks()
       // 公司任务归属的主会话（Coordinator 亲自消耗的 token 计入总控部门）
       const companySessionIds = new Set(allTasks.map(function (t) { return t.sessionId }).filter(Boolean))
@@ -1288,7 +1296,8 @@ export default {
       const allRows = tokens.rows || []
       return {
         tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
-        depts, dispatchDepts, roles, dispatches: callList.slice(-60),
+        depts, dispatchDepts, roles, dispatches: callList.slice(-500),
+        everCalledDepts, everCallCounts,
         totalTokens: allRows.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
         totalSurface: allRows.reduce(function (s, r) { return s + (r.surfaceTokens || 0) }, 0),
         concurrency: CONCURRENCY.limit || 3,
