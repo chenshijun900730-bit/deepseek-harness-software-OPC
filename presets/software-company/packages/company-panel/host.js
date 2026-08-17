@@ -3,9 +3,13 @@
 // 不注册任何 company_* 工具、不注入公司协议段——那些留在 software-company 预置（会话平面）。
 // 与预置内 company-r2 行并存时：/company-api 路由先到先得（预置侧有 try/catch 容忍），
 // 子代理日志采用文件级去重，避免两实例重复写行。
+import { realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+
 export default {
   name: 'software-company-panel',
-  inject: ['fs', 'timer'],
+  inject: ['fs', 'timer', 'webServer'],
   apply(ctx) {
     const fsService = ctx.fs
     const sandboxPolicy = ctx.get('sandboxPolicy')
@@ -357,9 +361,18 @@ export default {
     // v3：/company 画布页 + /company/static 静态文件改由本宿主平面插件注册——
     // 开机即注册、永久生效；预置 company-r2 会话挂载/卸载不再影响画布页面可用性
     // （company-r2 侧同名注册会因 duplicate 抛错并被其 try/catch 吞掉，无副作用）。
+    // 兼容注：DSH ≥ 0.1.0-rc.6 里未在 inject 声明的服务 ctx.get() 拿不到，
+    // webServer 必须进 inject，否则下面整段路由注册被静默跳过（胶囊照常出现，
+    // 但 /company 与 /company-api 全部 404 回落到宿主 SPA）。
     const webServer = ctx.get('webServer')
     if (webServer !== undefined) {
-      const webDir = new URL('../company-r2/web/', import.meta.url).pathname
+      // 宿主平面挂载是 node_modules/software-company-panel 符号链接；DSH ≥ rc.6
+      // 的加载器不穿透符号链接，import.meta.url 停在链接路径上，'../company-r2/web/'
+      // 会解析到不存在的 node_modules/company-r2/web/。先 realpath 回 preset 真实目录。
+      let webDir = new URL('../company-r2/web/', import.meta.url).pathname
+      try {
+        webDir = dirname(realpathSync(fileURLToPath(import.meta.url))) + '/../company-r2/web/'
+      } catch (e) { /* realpath 失败退回链接相对路径 */ }
       async function readWebFile(name) {
         if (!/^[a-zA-Z0-9_.-]+$/.test(name)) return undefined
         return await readTextAt(webDir + name)

@@ -1,6 +1,6 @@
 {
   "name": "software-company-panel",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "软件公司 Harness 面板（宿主平面）：/company-api 只读+操作路由与浏览器胶囊，跨会话常驻",
   "type": "module",
   "main": "./host.js",

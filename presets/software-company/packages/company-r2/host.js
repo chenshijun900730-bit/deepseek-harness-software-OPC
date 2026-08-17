@@ -7,7 +7,9 @@ import { DEPT_ID_RE, validateHire, renderDeptPresetYml, mergeRole, undoRole } fr
 
 export default {
   name: 'software-company-harness',
-  inject: ['fs', 'tools', 'timer'],
+  // webServer 必须显式声明：DSH ≥ 0.1.0-rc.6 里未声明则 ctx.get('webServer') 拿不到，
+  // /company-api 系路由会被静默跳过，画布拿不到任何数据。
+  inject: ['fs', 'tools', 'timer', 'webServer'],
   apply(ctx) {
     const fsService = ctx.fs
     const sandboxPolicy = ctx.get('sandboxPolicy')
