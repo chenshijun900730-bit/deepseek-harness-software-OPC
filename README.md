@@ -69,7 +69,11 @@ assets/                     演示视频与面板截图
 要求 Node.js `^22.19.0 || >=24.0.0`，需要一个可访问 `deepseek-v4-pro` / `deepseek-v4-flash` 的 DeepSeek API Key。
 
 ```bash
-# 1. 启动 DSH 宿主
+# 0. 获取本仓库
+git clone https://github.com/chenshijun900730-bit/deepseek-harness-software-OPC.git
+cd deepseek-harness-software-OPC
+
+# 1. 启动 DSH 宿主（默认 127.0.0.1:3080；端口被占用时加 --port 14080）
 npx @deepseek-ai/dsh web
 
 # 2. 安装 preset
@@ -79,10 +83,19 @@ cp -R presets/software-company ~/.dsh/.agent-presets/software-company
 # agent-presets:
 #   default: software-company
 
-# 4. 重启 DSH，在 Web UI 设置里填入 API Key，点右上角 🏢 Company
+# 4. 挂载总监面板（必做，否则右上角不会出现 🏢 Company 胶囊且无报错提示）
+mkdir -p ~/.dsh/profiles/web/node_modules
+ln -s ~/.dsh/.agent-presets/software-company/packages/company-panel \
+  ~/.dsh/profiles/web/node_modules/software-company-panel
+# 并在 ~/.dsh/profiles/web/cordis.patch.yml 写入（文件不存在则创建）：
+# - insert:
+#     - id: company-panel
+#       name: software-company-panel
+
+# 5. 重启 DSH，在 Web UI 设置里填入 API Key，点右上角 🏢 Company
 ```
 
-完整步骤（含源码构建、常见报错、company-panel 宿主挂载迁移）见 [INSTALL.md](INSTALL.md)。
+完整步骤（含全局安装备选路径、端口冲突处理、npm allow-scripts 警告说明、常见报错排查）见 [INSTALL.md](INSTALL.md)。
 
 ## License
 
