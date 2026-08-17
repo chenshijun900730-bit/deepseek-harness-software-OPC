@@ -4,7 +4,9 @@
 
 ## 演示
 
-<video src="https://github.com/chenshijun900730-bit/deepseek-harness-software-OPC/releases/download/v0.1.0/demo-panel.mp4" controls muted width="100%"></video>
+![总监大画布演示动图](assets/demo-panel.gif)
+
+**[▶ 观看高清演示视频（8s，MP4）](https://github.com/chenshijun900730-bit/deepseek-harness-software-OPC/releases/download/v0.1.0/demo-panel.mp4)**
 
 [![总监大画布](assets/panel-overview.png)](assets/panel-overview.png)
 
