@@ -2,7 +2,7 @@ import nodeFs from 'node:fs'
 import { FLOW_TEMPLATES, STAGES_LEGACY, validateFlow, readyNodes, adjustFlow } from './lib/flow.js'
 import { createEventsFile, appendEvent, readSince } from './lib/events.js'
 import { buildContract, validateContract, signContract, renderContractMarkdown, assertionBadges } from './lib/contract.js'
-import { attributeUsage, aggregateByDepartment } from './lib/usage.js'
+import { attributeUsage, aggregateByDepartment, filterAttributedByScope, everCallCountsOf, sumTokens } from './lib/usage.js'
 import { DEPT_ID_RE, validateHire, renderDeptPresetYml, mergeRole, undoRole } from './lib/hire.js'
 
 export default {
@@ -1248,23 +1248,31 @@ export default {
         ])
       } catch (e) { dispatches = null }
       if (dispatches === null) dispatches = []
-      // 全时全项目「被调用过」口径：在 scope 过滤之前基于全量 dispatches 统计，
-      // 供画布「蓝色待命」状态与「调用×N」计数使用（不受 scope 与 60 条窗口影响）。
-      const everCallCounts = {}
-      for (const d of dispatches) {
-        if (!d.department) continue
-        everCallCounts[d.department] = (everCallCounts[d.department] || 0) + 1
-      }
-      const everCalledDepts = Object.keys(everCallCounts)
+      // 全项目「被调用过」口径（「🏢 全部」视图使用）：基于全量 dispatches 统计。
+      const allEver = everCallCountsOf(dispatches)
+      const everCallCountsAll = allEver.counts
+      const everCalledDeptsAll = allEver.depts
       const allTasks = await listAllTasks()
       // 公司任务归属的主会话（Coordinator 亲自消耗的 token 计入总控部门）
       const companySessionIds = new Set(allTasks.map(function (t) { return t.sessionId }).filter(Boolean))
       const attributed = attributeUsage(tokens.rows || [], dispatches, companySessionIds)
       const ids = await scopedTaskIds(scope, allTasks)
       const tasks = ids ? allTasks.filter(function (t) { return ids.has(taskKey(t.project, t.taskId)) }) : allTasks
-      // 会话隔离：部门聚合/活跃部门/调用明细/总量都只算该会话任务归属的部分
-      const scopedAttributed = ids ? attributed.filter(function (a) { return !a.taskId || ids.has(taskKey(a.project, a.taskId)) }) : attributed
+      // 会话隔离：部门聚合/活跃部门/调用明细/总量都只算该会话任务归属的部分。
+      // 主会话行（taskId=null）按 scopedSessionIds 归属，别的会话根 token 不再混入。
+      const scopedSessionIds = new Set(tasks.map(function (t) { return t.sessionId }).filter(Boolean))
+      const scopedAttributed = ids
+        ? filterAttributedByScope(attributed, ids, scopedSessionIds)
+        : attributed
       const depts = aggregateByDepartment(scopedAttributed)
+      // 部门「待命」口径随 scope：有 scope 时只统计本会话任务的派工；
+      // 全项目口径保留在 *All 字段（「全部」视图使用）。
+      const scopedDispatches = ids
+        ? dispatches.filter(function (d) { return !d.taskId || ids.has(taskKey(d.project, d.taskId)) })
+        : dispatches
+      const scopedEver = everCallCountsOf(scopedDispatches)
+      const everCallCounts = scopedEver.counts
+      const everCalledDepts = scopedEver.depts
       // 部门档案并入（模型/reasoning/中文名），画布抽屉与悬停卡直接展示
       for (const k of Object.keys(depts)) {
         const role = ROLES[k]
@@ -1305,7 +1313,9 @@ export default {
         tasks: tasks.map(function (t) { return { taskId: t.taskId, status: t.status, type: t.type, requirement: (t.requirement || '').slice(0, 120) } }),
         depts, dispatchDepts, roles, dispatches: callList.slice(-500),
         everCalledDepts, everCallCounts,
-        totalTokens: allRows.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        everCalledDeptsAll, everCallCountsAll,
+        totalTokens: ids ? sumTokens(scopedAttributed) : allRows.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
+        totalTokensAll: allRows.reduce(function (s, r) { return s + (r.totalTokens || 0) }, 0),
         totalSurface: allRows.reduce(function (s, r) { return s + (r.surfaceTokens || 0) }, 0),
         concurrency: CONCURRENCY.limit || 3,
         at: now(),
