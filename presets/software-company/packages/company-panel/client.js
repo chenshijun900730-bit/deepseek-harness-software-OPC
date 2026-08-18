@@ -77,7 +77,7 @@
   let agentTotal = 0
   let detail = null
   let confirmAction = null
-  let canvasOpen = true
+  let canvasOpen = false
   let refreshSig = ''
   // 会话级隔离：每个对话框一个 Company
   let scope = null
@@ -139,6 +139,7 @@
   scopeSel.addEventListener('change', function () { applyScope(scopeSel.value || null, false) })
   const refreshBtn = el('button', btnStyle('#94a3b8'), '\u21BB')
   const canvasBtn = el('button', btnStyle(canvasOpen ? '#f59e0b' : '#94a3b8'), '\u{1F5FA} \u753B\u5E03')
+  canvasBtn.title = '总监大画布：以覆盖层抽屉形式展开（收起后任务/Token/子代理列表占满面板）'
   canvasBtn.addEventListener('click', function () { canvasOpen = !canvasOpen; render() })
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
@@ -242,23 +243,23 @@
     window.addEventListener('pointercancel', onUp)
   })
 
-  // 画布区（任务选项卡上方）：iframe 复用 /company 页；收起时卸载停轮询，展开时重新挂载
-  const canvasWrap = el('div', { display: 'none', flex: 'none', borderBottom: '1px solid #1f2937', background: '#0b0f19' })
-  const canvasBar = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', fontSize: '11px', color: '#9ca3af', background: '#111827' }, [
-    el('span', null, '\u{1F5FA} 总监大画布 · 实时（拖动节点 / 悬停信息卡 / 画布上审批决策）'),
-    el('span', { cursor: 'pointer', color: '#f59e0b', fontWeight: '600' }, '\u6536\u8D77 \u25B2'),
+  // 画布区：覆盖层抽屉（悬浮在列表上方，收起后列表占满整个面板高度）
+  const canvasWrap = el('div', { display: 'none', position: 'absolute', left: '0', right: '0', top: '34px', bottom: '0', zIndex: '20', background: '#0b0f19', flexDirection: 'column' })
+  const canvasBar = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', fontSize: '11px', color: '#9ca3af', background: '#111827', borderBottom: '1px solid #1f2937' }, [
+    el('span', null, '\u{1F5FA} 总监大画布 · 覆盖层（实时 · 拖动节点 / 悬停信息卡 / 画布上审批决策）'),
+    el('span', { cursor: 'pointer', color: '#f59e0b', fontWeight: '600' }, '\u6536\u8D77 \u25BC'),
   ])
   canvasBar.children[1].addEventListener('click', function () { canvasOpen = false; render() })
   const canvasFrame = document.createElement('iframe')
   canvasFrame.setAttribute('title', '总监大画布')
-  canvasFrame.style.cssText = 'width:calc(100% - 8px);height:620px;border:0;display:block;background:#0b0f19;margin:0 4px'
+  canvasFrame.style.cssText = 'width:calc(100% - 8px);flex:1;border:0;display:block;background:#0b0f19;margin:0 4px;min-height:320px'
   // 画布加载完成后同步当前 scope（避免画布首次打开短暂停留在「全部」）
   canvasFrame.addEventListener('load', function () { notifyCanvas(!scopeChosen) })
   canvasWrap.appendChild(canvasBar)
   canvasWrap.appendChild(canvasFrame)
   function mountCanvas(mount) {
     if (mount) {
-      canvasWrap.style.display = 'block'
+      canvasWrap.style.display = 'flex'
       canvasFrame.style.pointerEvents = 'auto' // 兜底：任何异常路径下画布都可交互
       if (canvasFrame.getAttribute('src') !== '/company') canvasFrame.setAttribute('src', '/company')
       syncCanvasHeight()
@@ -268,7 +269,8 @@
     }
   }
   function syncCanvasHeight() {
-    canvasFrame.style.height = Math.max(420, (panelSize.h || 620) - 150) + 'px'
+    // 覆盖层抽屉：iframe 占满画布条以下空间，列表不再被挤压
+    canvasFrame.style.height = 'auto'
   }
 
   const tabs = el('div', { display: 'flex', gap: '4px', padding: '8px 10px 0' })
@@ -278,7 +280,7 @@
   liveWrap.id = 'company-live-wrap'
   const footer = el('div', { padding: '7px 12px', borderTop: '1px solid #1f2937', fontSize: '10px', color: '#6b7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, [
     el('span', null, '批准门禁 · 合同冻结 · 所有权互斥 · FAIL→全新 Repair Generator · 2修1重规划后暂停'),
-    el('span', { fontSize: '10px', color: '#4b5563' }, '拖任意边界调整大小'),
+    el('span', { fontSize: '10px', color: '#4b5563' }, '🗺 画布为覆盖层抽屉 · 拖任意边界调整大小'),
   ])
   panel.appendChild(header); panel.appendChild(tabs); panel.appendChild(body); panel.appendChild(footer)
 
@@ -330,7 +332,7 @@
     window.addEventListener('pointercancel', onUp)
   }
   function edgeHandle(cursor, mode) {
-    const h = el('div', { position: 'absolute', zIndex: '12', background: 'transparent' })
+    const h = el('div', { position: 'absolute', zIndex: '31', background: 'transparent' })
     h.style.cursor = cursor
     h.addEventListener('pointerdown', function (e) { startResize(e, mode) })
     return h
@@ -345,7 +347,7 @@
   Object.assign(edgeBottom.style, { bottom: '-4px', left: '8px', right: '8px', height: '8px' })
   panel.appendChild(edgeLeft); panel.appendChild(edgeRight); panel.appendChild(edgeTop); panel.appendChild(edgeBottom)
 
-  const grip = el('div', { position: 'absolute', right: '-6px', bottom: '-6px', width: '26px', height: '26px', cursor: 'nwse-resize', zIndex: '12' })
+  const grip = el('div', { position: 'absolute', right: '-6px', bottom: '-6px', width: '26px', height: '26px', cursor: 'nwse-resize', zIndex: '31' })
   const gripSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   gripSvg.setAttribute('width', '14'); gripSvg.setAttribute('height', '14'); gripSvg.setAttribute('viewBox', '0 0 14 14')
   gripSvg.style.position = 'absolute'; gripSvg.style.right = '3px'; gripSvg.style.bottom = '3px'; gripSvg.style.pointerEvents = 'none'
@@ -900,6 +902,16 @@
       openTranscript(card.getAttribute('data-sid'), (liveFeeds[card.getAttribute('data-sid')] || {}).label, (liveFeeds[card.getAttribute('data-sid')] || {}).model)
     })
   }
+  // 内容签名：包含每会话的最新 seq 与流式半成品文本长度——文本在增长就必须重绘（流式观感）
+  function lfContentSig(show) {
+    return show.map(function (k) {
+      const f = liveFeeds[k]
+      const d = f.d || {}
+      const p = d.partial
+      const plen = p && p.blocks ? p.blocks.map(function (b) { return (b.text || '').length + ':' + (b.name || '') }).join(',') : '-'
+      return k.slice(0, 12) + ':' + (d.live ? 'L' : 'E') + ':' + ((d.latestSeq === undefined || d.latestSeq === null) ? '-' : d.latestSeq) + ':' + ((d.entries || []).length) + ':' + plen
+    }).join('|')
+  }
   function renderLiveWrap() {
     if (!liveWrap || liveWrap.parentNode !== panel) return
     const sids = lfSidOrder()
@@ -908,7 +920,7 @@
     const idle = sids.filter(function (k) { return liveFeeds[k].d && !liveFeeds[k].d.live && nowT - liveFeeds[k].at < 300000 })
     const show = live.concat(idle)
     if (show.length === 0) { if (liveWrap.style.display !== 'none') { liveWrap.style.display = 'none'; liveWrap.innerHTML = '' } return }
-    const sig = show.join(',')
+    const sig = lfContentSig(show)
     if (liveWrap.dataset.sig === sig && liveWrap.style.display !== 'none') return
     liveWrap.dataset.sig = sig
     liveWrap.style.display = 'block'
@@ -926,7 +938,7 @@
     const show = live.concat(idle)
     if (show.length === 0 || (live.length === 0 && dockDismissed)) { dock.style.display = 'none'; dock.dataset.sig = ''; return }
     dock.style.display = 'flex'
-    const sig = show.join(',') + '|' + (dockCollapsed ? 'c' : 'o')
+    const sig = lfContentSig(show) + '|' + (dockCollapsed ? 'c' : 'o')
     if (dock.dataset.sig === sig) return
     dock.dataset.sig = sig
     const head = '<div class="lf-dock-head" id="lf-dock-head" style="cursor:grab;user-select:none;display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1f2937;border-bottom:1px solid #374151;">' +
@@ -972,7 +984,7 @@
   }
   async function liveFeedTick() {
     const nowT = Date.now()
-    if (nowT - liveTickAt < 1800) return
+    if (nowT - liveTickAt < 1200) return
     liveTickAt = nowT
     try {
       const scopeQ = scope ? '?scope=' + encodeURIComponent(scope) : ''
@@ -990,7 +1002,7 @@
       for (const d of live.slice(0, 3)) {
         const sid = d.sessionId
         const f = liveFeeds[sid] || { at: 0 }
-        if (nowT - f.at < 1200) continue
+        if (nowT - f.at < 900) continue
         f.at = nowT
         try {
           const t = await getJSON('/company-api/agent-transcript?sessionId=' + encodeURIComponent(sid))
@@ -1063,7 +1075,7 @@
   render()
   refreshAll()
   setInterval(function () { if (open) refreshAll() }, 2000)
-  setInterval(liveFeedTick, 2000)
+  setInterval(liveFeedTick, 1500)
   liveFeedTick()
   }
 
