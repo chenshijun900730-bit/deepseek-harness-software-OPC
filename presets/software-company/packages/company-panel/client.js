@@ -938,7 +938,8 @@
     const live = sids.filter(function (k) { return liveFeeds[k].d && liveFeeds[k].d.live })
     const idle = sids.filter(function (k) { return liveFeeds[k].d && !liveFeeds[k].d.live && nowT - liveFeeds[k].at < 60000 })
     const show = live.concat(idle)
-    if (show.length === 0 || (live.length === 0 && dockDismissed)) { dock.style.display = 'none'; dock.dataset.sig = ''; return }
+    // ✕ 真正关闭：即使部门仍在工作也保持关闭，直到下一次新调用（新会话出现）自动再弹出
+    if (show.length === 0 || dockDismissed) { dock.style.display = 'none'; dock.dataset.sig = ''; return }
     dock.style.display = 'flex'
     const sig = lfContentSig(show) + '|' + (dockCollapsed ? 'c' : 'o')
     if (dock.dataset.sig === sig) return
@@ -1000,7 +1001,13 @@
         live.push(d)
       }
       const sids = live.map(function (x) { return x.sessionId }).sort().join(',')
-      if (sids !== lastLiveSids) { lastLiveSids = sids; if (live.length) dockDismissed = false }
+      // 有新部门开工（新的会话 id 出现）→ 自动重新弹出（即使此前被 ✕ 关闭）
+      if (sids !== lastLiveSids) {
+        const prev = lastLiveSids ? lastLiveSids.split(',') : []
+        const fresh = sids.split(',').filter(function (s) { return s && prev.indexOf(s) < 0 })
+        if (fresh.length) { dockDismissed = false; dockCollapsed = false }
+        lastLiveSids = sids
+      }
       for (const d of live.slice(0, 3)) {
         const sid = d.sessionId
         const f = liveFeeds[sid] || { at: 0 }
