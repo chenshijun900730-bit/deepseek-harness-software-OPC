@@ -4,6 +4,7 @@ import { createEventsFile, appendEvent, readSince } from './lib/events.js'
 import { buildContract, validateContract, signContract, renderContractMarkdown, assertionBadges } from './lib/contract.js'
 import { attributeUsage, aggregateByDepartment, filterAttributedByScope, everCallCountsOf, sumTokens } from './lib/usage.js'
 import { DEPT_ID_RE, validateHire, renderDeptPresetYml, mergeRole, undoRole } from './lib/hire.js'
+import { buildTranscript } from './lib/transcript.js'
 
 export default {
   name: 'software-company-harness',
@@ -881,6 +882,7 @@ export default {
                 id: sid,
                 isRoot: false,
                 persisted: !live,
+                live: !!live,
                 totalTokens: input + output,
                 surfaceTokens: 0,
                 surfaceDeltaTokens: 0,
@@ -931,6 +933,7 @@ export default {
             const data = {
               id: sid,
               isRoot: roots.indexOf(a) >= 0,
+              live: true,
               totalTokens: m.totalTokens,
               surfaceTokens: m.surfaceTokens,
               surfaceDeltaTokens: m.surfaceDeltaTokens,
@@ -992,6 +995,7 @@ export default {
             else if (p === '/company-api/task') out = await taskDetail(q.get('taskId'))
             else if (p === '/company-api/tokens') out = await tokensSnapshot()
             else if (p === '/company-api/agents') out = await agentsLogSnapshot()
+            else if (p === '/company-api/agent-transcript') out = await agentTranscript(q.get('sessionId'))
             else if (p === '/company-api/events') out = await eventsSnapshot(q)
             else if (p === '/company-api/flow') out = await flowSnapshot(q)
             else if (p === '/company-api/contract') out = await contractSnapshot(q)
@@ -1134,6 +1138,47 @@ export default {
         } catch (e) {}
       }
       return issued
+    }
+
+    // ================= 子部门实时思考/对话转录（总监实时观看子代理工作过程） =================
+    // 存活会话读内存事件（便宜，2s 轮询无压力）；已结束会话只在显式请求时读一次
+    // 持久日志（解压+重放贵），结果缓存 5s 供面板轮询复用。
+    const transcriptCache = new Map() // sid -> { at, built }
+    async function agentTranscript(sid) {
+      if (!sid) return { error: 'sessionId 必填' }
+      let live = null
+      try {
+        const sessions = ctx.get('sessions')
+        live = sessions ? sessions.get(sid) : undefined
+      } catch (e) {}
+      let events = null
+      if (live) {
+        events = (live.events || [])
+      } else {
+        const cached = transcriptCache.get(sid)
+        if (cached !== undefined && Date.now() - cached.at < 5000) events = cached.events
+        else {
+          const sq = ctx.get('sessionQuery')
+          if (sq !== undefined) {
+            try {
+              const snap = await sq.readSession(sid)
+              events = (snap && snap.events) || null
+              if (events) transcriptCache.set(sid, { at: Date.now(), events })
+            } catch (e) {}
+          }
+        }
+      }
+      if (!events) return { error: '会话不存在或不可读（可能已持久化且日志不可达）', sessionId: sid, live: !!live }
+      const built = buildTranscript(events)
+      return {
+        sessionId: sid,
+        live: !!live,
+        latestSeq: built.latestSeq,
+        model: built.model,
+        provider: built.provider,
+        entries: built.entries,
+        partial: built.partial || undefined,
+      }
     }
 
     async function agentsLogSnapshot() {
@@ -1313,6 +1358,8 @@ export default {
         const row = tokenById.get(d.sessionId)
         callList.push({
           dept: d.department, taskId: d.taskId || null, at: d.at || d.ts || null,
+          sessionId: d.sessionId,
+          live: !!(row && row.live === true),
           model: row && row.model ? row.model : '',
           modelProvider: row && row.modelProvider ? row.modelProvider : '',
           tokens: row ? (row.totalTokens || 0) : 0,

@@ -670,7 +670,7 @@
       '<div class="k" style="margin-top:6px;">token</div>累计 ' + fmt(d.totalTokens || 0) + ' · 表面 ' + fmt(d.surfaceTokens || 0) + ' · 排名 ' + (d.rank || '-') +
       '<div class="k" style="margin-top:6px;">调用记录（' + (STATE.focusTask ? '聚焦任务 ' : '全部') + calls.length + ' 次 · 点行看详情）</div>' +
       (recent.length ? recent.map(function (c, i) {
-        return '<div data-call-idx="' + i + '" style="padding:3px 0;border-bottom:1px solid #141a26;cursor:pointer;">' + String(c.at || '').slice(11, 19) + ' · ' + (c.taskId || '?') + ' · ' + fmtDur(c.durationMs) + ' · ' + (c.model || '?') + ' · ⚡' + fmt(c.tokens || 0) + '</div>'
+        return '<div data-call-idx="' + i + '" style="padding:3px 0;border-bottom:1px solid #141a26;cursor:pointer;">' + (c.live ? '🟢 ' : '') + String(c.at || '').slice(11, 19) + ' · ' + (c.taskId || '?') + ' · ' + fmtDur(c.durationMs) + ' · ' + (c.model || '?') + ' · ⚡' + fmt(c.tokens || 0) + '</div>'
       }).join('') : '<div style="color:#6b7280;">暂无调用记录</div>') +
       '</div><div class="btn" style="margin:8px 10px;" onclick="window.__closePanel()">✕ 关闭</div>')
     var drawer = $('rail-drawer')
@@ -681,6 +681,9 @@
   }
   function openCallDetail(d) {
     if (!d) return
+    var liveBtn = d.sessionId
+      ? '<div style="margin-top:10px;"><button class="btn" style="border-color:#a78bfa;color:#c4b5fd;width:100%;" onclick="window.openAgentTranscript(\'' + String(d.sessionId).replace(/'/g, '') + '\',\'' + String(d.dept || '子部门').replace(/'/g, '') + '\')">💭 查看实时思考/对话' + (d.live ? '（🟢 工作中 · 边生成边显示）' : '') + '</button></div>'
+      : '<div class="k" style="margin-top:6px;">实时对话</div>旧派工记录无会话 id，无法回溯（新派工自动支持）。'
     fillPanel('<div style="font-weight:700;color:#7dd3fc;padding:6px 10px;">📞 调用卡：' + (d.dept || '?') + '</div>' +
       '<div class="drawer">' +
       '<div class="k">时间</div>' + String(d.at || '').replace('T', ' ').slice(0, 19) + (d.durationMs ? ' · 时长 ' + fmtDur(d.durationMs) : '') +
@@ -689,7 +692,109 @@
       '<div class="k" style="margin-top:6px;">token</div>' + fmt(d.tokens || 0) +
       '<div class="k" style="margin-top:6px;">做了什么</div>' +
       '<div style="white-space:pre-wrap;line-height:1.5;">' + ((d.prompt || '（未记录：旧派工无会话日志）').replace(/</g, '&lt;')) + '</div>' +
+      liveBtn +
       '</div><div class="btn" style="margin:8px 10px;" onclick="window.__closePanel()">✕ 关闭</div>')
+  }
+
+  // ================= 子部门实时思考/对话（模态层 · 1.5s 增量拉取 · 边生成边显示） =================
+  var TC = { timer: null, seq: null, sid: null }
+  function escTc(s) {
+    return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
+  // 轻量 Markdown（主界面观感）：代码块 / 行内代码 / 粗体 / 标题
+  function mdLiteTc(s) {
+    var out = escTc(s)
+    out = out.replace(/```([\s\S]*?)```/g, function (m, code) { return '<pre class="tc-code">' + code.replace(/^\n/, '') + '</pre>' })
+    out = out.replace(/`([^`\n]+)`/g, '<code class="tc-code-i">$1</code>')
+    out = out.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    out = out.replace(/^#{1,4}\s+(.+)$/gm, '<b class="tc-h">$1</b>')
+    out = out.replace(/^- (.+)$/gm, '• $1')
+    return out
+  }
+  function tcTime(t) {
+    if (t === undefined || t === null) return ''
+    var d = new Date(typeof t === 'number' ? t : t)
+    if (isNaN(d.getTime())) return ''
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0')
+  }
+  function tcBlockHtml(b) {
+    if (!b) return ''
+    if (b.t === 'reasoning') return '<details open class="tc-think"><summary>💭 思考</summary><pre class="tc-pre">' + escTc(b.text) + '</pre></details>'
+    if (b.t === 'text') return '<div class="tc-text">💬 ' + mdLiteTc(b.text) + '</div>'
+    if (b.t === 'tool') {
+      return '<div class="tc-tool"><details' + (b.resultError ? ' open' : '') + '><summary>🛠 ' + escTc(b.name) + '</summary>' +
+        '<div class="tc-k2">参数</div><pre class="tc-pre">' + escTc(b.arguments || '') + '</pre>' +
+        (b.result !== undefined ? '<div class="tc-k2">结果</div><pre class="tc-pre' + (b.resultError ? ' tc-err' : '') + '">' + escTc(b.result) + '</pre>' : '') +
+        '</details></div>'
+    }
+    return ''
+  }
+  function tcBadge(live, model, provider) {
+    var b = $('tc-badge')
+    if (!b) return
+    var modelTxt = model ? ' · ' + model + (provider ? '（' + provider + '）' : '') : ''
+    if (live) {
+      b.style.background = '#0a2a14'; b.style.color = '#86efac'; b.style.border = '1px solid #22c55e'
+      b.textContent = '🟢 工作中 · 实时跟随' + modelTxt
+    } else {
+      b.style.background = '#1f2937'; b.style.color = '#9ca3af'; b.style.border = '1px solid #374151'
+      b.textContent = '⚪ 已结束' + modelTxt
+    }
+  }
+  window.openAgentTranscript = function (sid, label) {
+    if (!sid) return
+    if (TC.timer) { clearInterval(TC.timer); TC.timer = null }
+    TC.seq = null
+    TC.sid = String(sid)
+    var card = $('modal-card')
+    if (card) card.style.width = '680px'
+    var modal = $('modal')
+    if (!modal) return
+    var body = $('modal-card')
+    body.innerHTML = '<div style="font-weight:700;font-size:14px;color:#e5e7eb;">💭 ' + escTc(label || '子部门') + ' · 实时思考/对话</div>' +
+      '<div style="color:#9ca3af;font-size:11px;margin-top:4px;">会话 ' + String(sid).slice(0, 8) + ' · 1.5s 增量拉取 · 思考/对话/工具调用边生成边显示' +
+      '<span id="tc-badge" style="margin-left:10px;padding:2px 8px;border-radius:8px;background:#1f2937;color:#9ca3af;border:1px solid #374151;">⚪ 状态未知</span></div>' +
+      '<div id="tc-list" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto;"><div style="color:#6b7280;font-size:12px;">加载中…</div></div>' +
+      '<div style="margin-top:10px;text-align:right;"><button class="btn" onclick="window.__closeAgentTranscript()">关闭</button></div>'
+    modal.classList.add('on')
+    window.__tcRefresh()
+    TC.timer = setInterval(function () { window.__tcRefresh() }, 1500)
+  }
+  window.__closeAgentTranscript = function () {
+    if (TC.timer) { clearInterval(TC.timer); TC.timer = null }
+    TC.sid = null
+    TC.seq = null
+    var modal = $('modal')
+    if (modal) modal.classList.remove('on')
+    var card = $('modal-card')
+    if (card) card.style.width = ''
+  }
+  window.__tcRefresh = function () {
+    if (!TC.sid) return
+    api('/company-api/agent-transcript?sessionId=' + encodeURIComponent(TC.sid), 6000).then(function (d) {
+      var p = d.partial
+      var sig = (d.live ? 'L' : 'E') + '|' + ((d.latestSeq === null || d.latestSeq === undefined) ? '-' : d.latestSeq) + '|' + (d.entries ? d.entries.length : 0) + '|' + (p && p.blocks ? p.blocks.map(function (b) { return (b.text || '').length + ':' + (b.name || '') }).join(',') : '-')
+      if (sig === TC.seq) { tcBadge(d.live, d.model, d.provider); return }
+      TC.seq = sig
+      var list = $('tc-list')
+      if (!list) return
+      var nearBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 80
+      var html = ''
+      ;(d.entries || []).forEach(function (e) {
+        if (e.kind === 'user') {
+          html += '<div class="tc-card"><div class="tc-meta">📋 任务要求' + (e.time ? ' · ' + tcTime(e.time) : '') + '</div><div class="tc-md">' + mdLiteTc(e.text) + '</div></div>'
+        } else if (e.kind === 'assistant') {
+          html += '<div class="tc-card"><div class="tc-meta">💬 ' + (e.step !== undefined ? '第 ' + e.step + ' 步' : '回复') + (e.time ? ' · ' + tcTime(e.time) : '') + '</div>' + (e.blocks || []).map(tcBlockHtml).join('') + '</div>'
+        }
+      })
+      if (p && p.blocks && p.blocks.length) {
+        html += '<div class="tc-card tc-live"><div class="tc-meta">✍️ 正在输出… <span class="tc-cur">▍</span></div>' + p.blocks.map(tcBlockHtml).join('') + '</div>'
+      }
+      if (!html) html = '<div style="color:#6b7280;font-size:12px;">暂无对话内容（会话刚开始、消息尚未落地，或已结束且无记录）。</div>'
+      list.innerHTML = html
+      if (nearBottom) list.scrollTop = list.scrollHeight
+      tcBadge(d.live, d.model, d.provider)
+    }).catch(function () {})
   }
   window.__setView = function (v) {
     STATE.view = v === 'flow' ? 'flow' : 'org'
