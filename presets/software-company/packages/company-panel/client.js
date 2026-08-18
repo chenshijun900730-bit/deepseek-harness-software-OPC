@@ -138,8 +138,8 @@
   scopeSel.title = '会话范围'
   scopeSel.addEventListener('change', function () { applyScope(scopeSel.value || null, false) })
   const refreshBtn = el('button', btnStyle('#94a3b8'), '\u21BB')
-  const canvasBtn = el('button', btnStyle(canvasOpen ? '#f59e0b' : '#94a3b8'), '\u{1F5FA} \u663E\u793A\u8BE6\u7EC6\u4FE1\u606F')
-  canvasBtn.title = '总监大画布（详细信息）：以底部抽屉形式展开，列表在上、画布在下；收起后列表占满面板'
+  const canvasBtn = el('button', btnStyle(canvasOpen ? '#f59e0b' : '#94a3b8'), '\u{1F5FA} \u753B\u5E03')
+  canvasBtn.title = '总监大画布：以覆盖层抽屉形式展开（收起后任务/Token/子代理列表占满面板）'
   canvasBtn.addEventListener('click', function () { canvasOpen = !canvasOpen; render() })
   const closeBtn = el('button', btnStyle('#94a3b8'), '\u2715')
   refreshBtn.addEventListener('click', function () { refreshAll() })
@@ -243,10 +243,10 @@
     window.addEventListener('pointercancel', onUp)
   })
 
-  // 画布区：底部抽屉（详细信息）——列表在上、画布在下；收起后列表占满整个面板高度
-  const canvasWrap = el('div', { display: 'none', position: 'absolute', left: '0', right: '0', top: '45%', bottom: '0', zIndex: '20', background: '#0b0f19', flexDirection: 'column' })
+  // 画布区：覆盖层抽屉（悬浮在列表上方，收起后列表占满整个面板高度）
+  const canvasWrap = el('div', { display: 'none', position: 'absolute', left: '0', right: '0', top: '34px', bottom: '0', zIndex: '20', background: '#0b0f19', flexDirection: 'column' })
   const canvasBar = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', fontSize: '11px', color: '#9ca3af', background: '#111827', borderBottom: '1px solid #1f2937' }, [
-    el('span', null, '\u{1F5FA} 总监大画布 · 详细信息（实时 · 拖动节点 / 悬停信息卡 / 画布上审批决策）'),
+    el('span', null, '\u{1F5FA} 总监大画布 · 覆盖层（实时 · 拖动节点 / 悬停信息卡 / 画布上审批决策）'),
     el('span', { cursor: 'pointer', color: '#f59e0b', fontWeight: '600' }, '\u6536\u8D77 \u25BC'),
   ])
   canvasBar.children[1].addEventListener('click', function () { canvasOpen = false; render() })
@@ -280,7 +280,7 @@
   liveWrap.id = 'company-live-wrap'
   const footer = el('div', { padding: '7px 12px', borderTop: '1px solid #1f2937', fontSize: '10px', color: '#6b7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, [
     el('span', null, '批准门禁 · 合同冻结 · 所有权互斥 · FAIL→全新 Repair Generator · 2修1重规划后暂停'),
-    el('span', { fontSize: '10px', color: '#4b5563' }, '🗺 详细信息为底部抽屉 · 拖任意边界调整大小'),
+    el('span', { fontSize: '10px', color: '#4b5563' }, '🗺 画布为覆盖层抽屉 · 拖任意边界调整大小'),
   ])
   panel.appendChild(header); panel.appendChild(tabs); panel.appendChild(body); panel.appendChild(footer)
 
