@@ -979,6 +979,30 @@
       return k.slice(0, 12) + ':' + (d.live ? 'L' : 'E') + ':' + ((d.latestSeq === undefined || d.latestSeq === null) ? '-' : d.latestSeq) + ':' + ((d.entries || []).length) + ':' + plen
     }).join('|')
   }
+  // 记录/恢复每张卡片的内部滚动位置：流式重绘不打断用户向上滚动预览历史内容
+  function lfCaptureScrolls(container) {
+    const map = {}
+    if (!container) return map
+    container.querySelectorAll('.lf-card').forEach(function (card) {
+      const b = card.querySelector('.lf-body')
+      if (!b) return
+      map[card.getAttribute('data-sid')] = {
+        top: b.scrollTop,
+        follow: b.scrollTop + b.clientHeight >= b.scrollHeight - 80,
+      }
+    })
+    return map
+  }
+  function lfRestoreScrolls(container, map) {
+    if (!container) return
+    container.querySelectorAll('.lf-card').forEach(function (card) {
+      const s = map[card.getAttribute('data-sid')]
+      if (!s) return
+      const b = card.querySelector('.lf-body')
+      if (!b) return
+      b.scrollTop = s.follow ? b.scrollHeight : s.top
+    })
+  }
   function renderLiveWrap() {
     if (!liveWrap || liveWrap.parentNode !== panel) return
     const sids = lfSidOrder()
@@ -991,10 +1015,18 @@
     if (liveWrap.dataset.sig === sig && liveWrap.style.display !== 'none') return
     liveWrap.dataset.sig = sig
     liveWrap.style.display = 'block'
+    // 保留滚动位置：用户在底部则跟随新内容，否则停在原处继续预览
+    const oldList = liveWrap.querySelector('.lf-list')
+    const savedScroll = oldList ? oldList.scrollTop : 0
+    const followBottom = oldList ? (oldList.scrollTop + oldList.clientHeight >= oldList.scrollHeight - 80) : true
+    const cardScrolls = lfCaptureScrolls(liveWrap)
     liveWrap.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
       '<span style="font-weight:700;font-size:12px;color:#a78bfa;">💭 部门实时对话（边生成边显示 · 1.5s 增量）</span>' +
       '<span style="font-size:10px;color:var(--cp-mute);">' + (live.length ? live.length + ' 个部门工作中' : '暂无进行中部门') + ' · 点击卡片查看完整对话</span></div>' +
       '<div class="lf-list" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;">' + show.map(lfCardHtml).join('') + '</div>'
+    const newList = liveWrap.querySelector('.lf-list')
+    if (newList) newList.scrollTop = followBottom ? newList.scrollHeight : savedScroll
+    lfRestoreScrolls(liveWrap, cardScrolls)
     lfBindClicks(liveWrap)
   }
   function renderDock() {
@@ -1015,7 +1047,16 @@
       '<button class="lf-dbtn" data-act="dismiss" style="pointer-events:auto;cursor:pointer;background:transparent;border:1px solid var(--cp-faint);color:var(--cp-dim);border-radius:6px;font-size:11px;padding:2px 8px;">✕</button>' +
       '</div>'
     const bodyHtml = dockCollapsed ? '' : '<div class="lf-list" style="padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(44vh - 46px);">' + show.map(lfCardHtml).join('') + '</div>'
+    // 保留滚动位置：流式重绘不再把列表/卡片拽回顶部，用户可向上滚动预览历史内容；
+    // 位于底部时自动跟随新输出。
+    const oldDockList = dock.querySelector('.lf-list')
+    const savedDockScroll = oldDockList ? oldDockList.scrollTop : 0
+    const dockFollow = oldDockList ? (oldDockList.scrollTop + oldDockList.clientHeight >= oldDockList.scrollHeight - 80) : true
+    const dockCardScrolls = lfCaptureScrolls(dock)
     dock.innerHTML = head + bodyHtml
+    const newDockList = dock.querySelector('.lf-list')
+    if (newDockList) newDockList.scrollTop = dockFollow ? newDockList.scrollHeight : savedDockScroll
+    lfRestoreScrolls(dock, dockCardScrolls)
     lfBindClicks(dock)
     const dh = dock.querySelector('#lf-dock-head')
     if (dh && !dh.dataset.dragBound) {
@@ -1104,12 +1145,12 @@
     const s = document.createElement('style')
     s.id = 'company-lf-styles'
     s.textContent = [
-      '.lf-card { border:1px solid var(--cp-border2); border-radius:10px; background:var(--cp-bg); overflow:hidden; }',
+      '.lf-card { flex:none; border:1px solid var(--cp-border2); border-radius:10px; background:var(--cp-bg); overflow:hidden; }',
       '.lf-head { display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--cp-panel); border-bottom:1px solid var(--cp-border); flex-wrap:wrap; }',
       '.lf-name { font-weight:700; font-size:12px; color:var(--cp-text); }',
       '.lf-model { font-size:10px; color:var(--cp-info); background:var(--cp-chip); padding:1px 6px; border-radius:8px; }',
       '.lf-status { font-size:10px; color:var(--cp-ok); }',
-      '.lf-body { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }',
+      '.lf-body { padding:8px 10px; display:flex; flex-direction:column; gap:6px; max-height:340px; overflow-y:auto; }',
       '.lf-user { font-size:11px; color:var(--cp-dim); border-left:2px solid #3b82f6; padding-left:8px; white-space:pre-wrap; word-break:break-word; }',
       '.lf-think { display:flex; align-items:baseline; gap:6px; cursor:pointer; font-size:11px; color:var(--cp-think); background:var(--cp-chip); border:1px solid var(--cp-chipb); border-radius:6px; padding:4px 8px; }',
       '.lf-think-ic { flex:none; }',
