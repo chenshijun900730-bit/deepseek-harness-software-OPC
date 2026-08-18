@@ -596,7 +596,7 @@
   }
 
   window.__ModuleLoader__.load({
-    id: './packages/company-r2',
+    id: 'software-company-r2',
     factory: function () {
       var plugin = { apply: function () { installPanel() } }
       return { apply: plugin.apply, default: plugin }
