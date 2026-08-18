@@ -361,6 +361,9 @@ export default {
     // v3：/company 画布页 + /company/static 静态文件改由本宿主平面插件注册——
     // 开机即注册、永久生效；预置 company-r2 会话挂载/卸载不再影响画布页面可用性
     // （company-r2 侧同名注册会因 duplicate 抛错并被其 try/catch 吞掉，无副作用）。
+    // 兼容注：DSH ≥ 0.1.0-rc.6 里未在 inject 声明的服务 ctx.get() 拿不到，
+    // webServer 必须进 inject，否则下面整段路由注册被静默跳过（胶囊照常出现，
+    // 但 /company 与 /company-api 全部 404 回落到宿主 SPA）。
     const webServer = ctx.get('webServer')
     if (webServer !== undefined) {
       // rc.6 加载器不穿透符号链接：本包按 INSTALL.md 以裸包名挂载（node_modules 符号链接）时

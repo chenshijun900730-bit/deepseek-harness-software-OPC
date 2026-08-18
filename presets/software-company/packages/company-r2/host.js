@@ -8,8 +8,8 @@ import { buildTranscript } from './lib/transcript.js'
 
 export default {
   name: 'software-company-harness',
-  // webServer 必须进 inject：DSH rc.6 下未声明的 ctx.get('webServer') 返回 undefined，
-  // /company-api 与 /company 路由注册会被整体跳过（rc.5 源码版不要求，故此前未暴露）。
+  // webServer 必须显式声明：DSH ≥ 0.1.0-rc.6 里未声明则 ctx.get('webServer') 拿不到，
+  // /company-api 系路由会被静默跳过，画布拿不到任何数据。
   inject: ['fs', 'tools', 'timer', 'webServer'],
   apply(ctx) {
     const fsService = ctx.fs
