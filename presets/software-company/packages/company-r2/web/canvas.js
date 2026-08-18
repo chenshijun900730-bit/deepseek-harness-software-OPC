@@ -548,8 +548,14 @@
   }
   function renderContractIcons() {
     cv.querySelectorAll('.cicon').forEach(function (el) { el.remove() })
+    var svg = $('edges')
+    if (svg) svg.querySelectorAll('.cicon-line').forEach(function (el) { el.remove() })
     var deptOf = {}
     ;(STATE.flowNodes || []).forEach(function (n) { deptOf[n.id] = n.dept })
+    // 交接状态：done=已完成（绿线）；nextStep=下一步交接（橙线交给 renderNextEdges，此处不重复画）；
+    // 其余=尚未开始（灰色虚线）。任务完结后交接线仍常驻可见。
+    var nextTo = {}
+    ;(STATE.nextHandoffs || []).forEach(function (h) { if (nextTo[h.to] === undefined || h.step < nextTo[h.to]) nextTo[h.to] = h.step })
     ;(STATE.contracts || []).forEach(function (c) {
       var a = deptOf[c.from], b = deptOf[c.to]
       if (!a || !b) return
@@ -560,6 +566,26 @@
       else {
         x = (na.offsetLeft + na.offsetWidth / 2 + nb.offsetLeft + nb.offsetWidth / 2) / 2 - 8
         y = (na.offsetTop + na.offsetHeight / 2 + nb.offsetTop + nb.offsetHeight / 2) / 2 - 8
+      }
+      // 文件交接连线：两部门之间的线段，颜色随交接状态
+      if (a !== b && svg) {
+        var isDone = !!STATE.done[c.to]
+        var isNext = nextTo[c.to] !== undefined
+        if (!isNext) {
+          var x1 = na.offsetLeft + na.offsetWidth / 2, y1 = na.offsetTop + na.offsetHeight / 2
+          var x2 = nb.offsetLeft + nb.offsetWidth / 2, y2 = nb.offsetTop + nb.offsetHeight / 2
+          var p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+          p.setAttribute('class', 'cicon-line')
+          p.setAttribute('d', 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + ((y1 + y2) / 2) + ' ' + x2 + ',' + ((y1 + y2) / 2) + ' ' + x2 + ',' + y2)
+          p.setAttribute('stroke', isDone ? '#22c55e' : '#4b5563')
+          p.setAttribute('stroke-width', isDone ? '2' : '1.5')
+          p.setAttribute('fill', 'none')
+          if (!isDone) p.setAttribute('stroke-dasharray', '5 4')
+          var t = document.createElementNS('http://www.w3.org/2000/svg', 'title')
+          t.textContent = '文件交接：' + c.from + ' → ' + c.to + (isDone ? '（已完成）' : '（未开始）')
+          p.appendChild(t)
+          svg.appendChild(p)
+        }
       }
       var ic = document.createElement('div')
       ic.className = 'cicon'
