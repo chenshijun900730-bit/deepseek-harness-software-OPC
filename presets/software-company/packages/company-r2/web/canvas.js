@@ -891,7 +891,9 @@
         if (ORG[i].id === id) { ORG[i].x = DRAG.el.offsetLeft; ORG[i].y = DRAG.el.offsetTop; break }
       }
       renderOrgEdges()
+      renderNextEdges()
       renderCallCards()
+      renderContractIcons()
     } else {
       renderEdges(STATE.flow)
     }
