@@ -10,7 +10,7 @@
 
   const STAGES = ['INTAKE', 'CLASSIFIED', 'DISCOVERY', 'PRODUCT_PLANNED', 'WAITING_INITIAL_APPROVAL', 'SPRINT_DRAFTING', 'CONTRACT_REVIEW', 'CONTRACT_SIGNED', 'IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'SPRINT_PASSED', 'REPAIRING', 'REPLANNING', 'FINAL_E2E', 'RELEASED']
   const STATUS_COLOR = {
-    WAITING_INITIAL_APPROVAL: '#f59e0b', PAUSED: '#ef4444', TERMINATED: '#6b7280', RELEASED: '#22c55e',
+    WAITING_INITIAL_APPROVAL: '#f59e0b', PAUSED: '#ef4444', TERMINATED: 'var(--cp-mute)', RELEASED: '#22c55e',
     REPAIRING: '#ef4444', REPLANNING: '#ef4444', QA_RUNNING: '#3b82f6', FINAL_E2E: '#3b82f6',
     IMPLEMENTING: '#8b5cf6', SPRINT_PASSED: '#22c55e', CONTRACT_SIGNED: '#8b5cf6',
   }
@@ -52,7 +52,7 @@
   }
 
   // ---------- 面板骨架 ----------
-  const root = el('div', { position: 'fixed', top: '12px', right: '12px', zIndex: '100000', pointerEvents: 'auto', fontFamily: FONT, fontSize: '13px', color: '#e5e7eb' })
+  const root = el('div', { position: 'fixed', top: '12px', right: '12px', zIndex: '100000', pointerEvents: 'auto', fontFamily: FONT, fontSize: '13px', color: 'var(--cp-text)' })
   root.id = 'company-panel-root'
   document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(root) })
   if (document.body) document.body.appendChild(root)
@@ -61,8 +61,8 @@
   const dock = el('div', {
     position: 'fixed', right: '24px', bottom: '190px', width: '400px',
     maxWidth: 'calc(100vw - 32px)', maxHeight: '44vh', zIndex: '100001', pointerEvents: 'auto',
-    fontFamily: FONT, fontSize: '12px', color: '#e5e7eb', background: '#111827',
-    border: '1px solid #374151', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)',
+    fontFamily: FONT, fontSize: '12px', color: 'var(--cp-text)', background: 'var(--cp-panel)',
+    border: '1px solid var(--cp-border2)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)',
     overflow: 'hidden', flexDirection: 'column',
   })
   dock.id = 'company-live-dock'
@@ -96,7 +96,7 @@
   let roleTitles = {}
   let scopeHint = ''
 
-  const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
+  const pill = el('button', { pointerEvents: 'auto', cursor: 'pointer', background: 'var(--cp-panel)', color: 'var(--cp-text)', border: '1px solid var(--cp-border2)', borderRadius: '22px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', boxShadow: '0 4px 16px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: '6px' }, '\u{1F3E2} Company')
   let pillMoved = false
   pill.addEventListener('pointerdown', function (e) {
     pillMoved = false
@@ -130,11 +130,11 @@
   }
   const initial = maxPanelSize()
   const panelSize = { w: initial.w, h: initial.h }
-  const panel = el('div', { width: panelSize.w + 'px', height: panelSize.h + 'px', maxHeight: 'none', display: 'flex', flexDirection: 'column', background: '#111827', border: '1px solid #374151', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)', overflow: 'hidden', position: 'relative' })
-  const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #1f2937' })
+  const panel = el('div', { width: panelSize.w + 'px', height: panelSize.h + 'px', maxHeight: 'none', display: 'flex', flexDirection: 'column', background: 'var(--cp-panel)', border: '1px solid var(--cp-border2)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,.5)', overflow: 'hidden', position: 'relative' })
+  const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--cp-border)' })
   const title = el('span', { fontWeight: '700', fontSize: '15px' }, '\u{1F3E2} Software Company')
   const headerBtns = el('div', { display: 'flex', gap: '6px' })
-  const scopeSel = el('select', { pointerEvents: 'auto', cursor: 'pointer', background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '6px', padding: '5px 8px', fontSize: '12px', fontWeight: '600', maxWidth: '240px' })
+  const scopeSel = el('select', { pointerEvents: 'auto', cursor: 'pointer', background: 'var(--cp-panel)', color: 'var(--cp-text)', border: '1px solid var(--cp-border2)', borderRadius: '6px', padding: '5px 8px', fontSize: '12px', fontWeight: '600', maxWidth: '240px' })
   scopeSel.title = '会话范围'
   scopeSel.addEventListener('change', function () { applyScope(scopeSel.value || null, false) })
   const refreshBtn = el('button', btnStyle('#94a3b8'), '\u21BB')
@@ -149,7 +149,7 @@
     panelTop = 12
     render()
   })
-  const popoutBtn = el('button', btnStyle('#7dd3fc'), '\u29C9 \u72EC\u7ACB\u7A97\u53E3')
+  const popoutBtn = el('button', btnStyle('var(--cp-info)'), '\u29C9 \u72EC\u7ACB\u7A97\u53E3')
   popoutBtn.title = '把总监大画布弹出为独立窗口（可随意拖动，不局限在浏览器内）'
   popoutBtn.addEventListener('click', function () {
     try {
@@ -183,7 +183,7 @@
   }
   const gearBtn = el('button', btnStyle('#94a3b8'), '\u2699')
   gearBtn.title = '窗口按钮显示设置（可选显示/隐藏）'
-  const gearMenu = el('div', { display: 'none', position: 'absolute', top: '34px', right: '0px', background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', zIndex: '20', boxShadow: '0 8px 24px rgba(0,0,0,.5)', color: '#e5e7eb' })
+  const gearMenu = el('div', { display: 'none', position: 'absolute', top: '34px', right: '0px', background: 'var(--cp-panel)', border: '1px solid var(--cp-border2)', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', zIndex: '20', boxShadow: '0 8px 24px rgba(0,0,0,.5)', color: 'var(--cp-text)' })
   function renderGearMenu() {
     gearMenu.innerHTML = ''
     const items = [['popout', '⧉ 独立窗口按钮']]
@@ -211,6 +211,70 @@
   headerBtns.appendChild(gearBtn)
   headerBtns.appendChild(gearMenu)
   applyWinPrefs()
+
+  // ================= 主题切换（🌓 深色 / 浅色 / 跟随系统，localStorage 记住） =================
+  const CP_THEMES = {
+    dark: {
+      '--cp-bg': '#0b0f19', '--cp-panel': '#111827', '--cp-border': '#1f2937', '--cp-border2': '#374151',
+      '--cp-text': '#e5e7eb', '--cp-text2': '#cbd5e1', '--cp-dim': '#9ca3af', '--cp-mute': '#6b7280', '--cp-faint': '#4b5563',
+      '--cp-chip': '#0e2a43', '--cp-chipb': '#1e4a6b', '--cp-code': '#0f172a', '--cp-ok-bg': '#0a2a14',
+      '--cp-tool-bg': '#150b2e', '--cp-tool-b': '#4c1d95', '--cp-tool-t': '#312e81',
+      '--cp-think': '#93c5fd', '--cp-think-s': '#bfdbfe',
+      '--cp-accent1': '#c4b5fd', '--cp-ok': '#86efac', '--cp-info': '#7dd3fc', '--cp-warn': '#fdba74', '--cp-err': '#fca5a5', '--cp-flash': '#fde68a',
+    },
+    light: {
+      '--cp-bg': '#f8fafc', '--cp-panel': '#ffffff', '--cp-border': '#e2e8f0', '--cp-border2': '#cbd5e1',
+      '--cp-text': '#1e293b', '--cp-text2': '#334155', '--cp-dim': '#475569', '--cp-mute': '#64748b', '--cp-faint': '#94a3b8',
+      '--cp-chip': '#dbeafe', '--cp-chipb': '#bfdbfe', '--cp-code': '#f1f5f9', '--cp-ok-bg': '#dcfce7',
+      '--cp-tool-bg': '#ede9fe', '--cp-tool-b': '#ddd6fe', '--cp-tool-t': '#c4b5fd',
+      '--cp-think': '#1d4ed8', '--cp-think-s': '#1e40af',
+      '--cp-accent1': '#6d28d9', '--cp-ok': '#15803d', '--cp-info': '#0369a1', '--cp-warn': '#b45309', '--cp-err': '#dc2626', '--cp-flash': '#b45309',
+    },
+  }
+  const THEME_LABEL = { dark: '🌑 深色', light: '☀️ 浅色', auto: '🌓 跟随系统' }
+  const THEME_ORDER = ['dark', 'light', 'auto']
+  let themePref = 'auto'
+  try { const saved = localStorage.getItem('companyPanelTheme'); if (saved === 'light' || saved === 'auto' || saved === 'dark') themePref = saved } catch (e) {}
+  function resolvedTheme() {
+    if (themePref === 'auto') {
+      try { return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark' } catch (e) { return 'dark' }
+    }
+    return themePref
+  }
+  function applyTheme() {
+    const pal = CP_THEMES[resolvedTheme()] || CP_THEMES.dark
+    const targets = [root, dock]
+    for (const t of targets) {
+      if (!t) continue
+      for (const k of Object.keys(pal)) t.style.setProperty(k, pal[k])
+      t.setAttribute('data-cp-theme', resolvedTheme())
+    }
+    // 画布 iframe 同步主题（不重载：postMessage + src 参数双保险）
+    notifyCanvasTheme()
+  }
+  function notifyCanvasTheme() {
+    try {
+      if (canvasFrame && canvasFrame.contentWindow) {
+        canvasFrame.contentWindow.postMessage({ type: 'company-theme', theme: resolvedTheme() }, window.location.origin)
+      }
+    } catch (e) {}
+  }
+  const themeBtn = el('button', btnStyle('var(--cp-dim)'), THEME_LABEL[themePref])
+  themeBtn.title = '面板主题：深色 / 浅色 / 跟随系统'
+  themeBtn.addEventListener('click', function () {
+    const i = THEME_ORDER.indexOf(themePref)
+    themePref = THEME_ORDER[(i + 1) % THEME_ORDER.length]
+    try { localStorage.setItem('companyPanelTheme', themePref) } catch (e) {}
+    themeBtn.textContent = THEME_LABEL[themePref]
+    applyTheme()
+    render()
+  })
+  try {
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () { if (themePref === 'auto') applyTheme() })
+    }
+  } catch (e) {}
+  headerBtns.appendChild(themeBtn)
   headerBtns.appendChild(scopeSel); headerBtns.appendChild(popoutBtn); headerBtns.appendChild(refreshBtn); headerBtns.appendChild(canvasBtn); headerBtns.appendChild(closeBtn)
   header.appendChild(title); header.appendChild(headerBtns)
 
@@ -244,28 +308,29 @@
   })
 
   // 画布区：覆盖层抽屉（悬浮在列表上方，收起后列表占满整个面板高度）
-  const canvasWrap = el('div', { display: 'none', position: 'absolute', left: '0', right: '0', top: '34px', bottom: '0', zIndex: '20', background: '#0b0f19', flexDirection: 'column' })
-  const canvasBar = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', fontSize: '11px', color: '#9ca3af', background: '#111827', borderBottom: '1px solid #1f2937' }, [
+  const canvasWrap = el('div', { display: 'none', position: 'absolute', left: '0', right: '0', top: '34px', bottom: '0', zIndex: '20', background: 'var(--cp-bg)', flexDirection: 'column' })
+  const canvasBar = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', fontSize: '11px', color: 'var(--cp-dim)', background: 'var(--cp-panel)', borderBottom: '1px solid var(--cp-border)' }, [
     el('span', null, '\u{1F5FA} 总监大画布 · 覆盖层（实时 · 拖动节点 / 悬停信息卡 / 画布上审批决策）'),
     el('span', { cursor: 'pointer', color: '#f59e0b', fontWeight: '600' }, '\u6536\u8D77 \u25B2'),
   ])
   canvasBar.children[1].addEventListener('click', function () { canvasOpen = false; render() })
   const canvasFrame = document.createElement('iframe')
   canvasFrame.setAttribute('title', '总监大画布')
-  canvasFrame.style.cssText = 'width:calc(100% - 8px);flex:1;border:0;display:block;background:#0b0f19;margin:0 4px;min-height:320px'
-  // 画布加载完成后同步当前 scope（避免画布首次打开短暂停留在「全部」）
-  canvasFrame.addEventListener('load', function () { notifyCanvas(!scopeChosen) })
+  canvasFrame.style.cssText = 'width:calc(100% - 8px);flex:1;border:0;display:block;background:var(--cp-bg);margin:0 4px;min-height:320px'
+  // 画布加载完成后同步当前 scope 与主题（避免画布首次打开短暂停留在「全部」/错色）
+  canvasFrame.addEventListener('load', function () { notifyCanvas(!scopeChosen); notifyCanvasTheme() })
   canvasWrap.appendChild(canvasBar)
   canvasWrap.appendChild(canvasFrame)
+  function canvasSrc() { return '/company' + (themePref === 'auto' ? '' : '?theme=' + encodeURIComponent(resolvedTheme())) }
   function mountCanvas(mount) {
     if (mount) {
       canvasWrap.style.display = 'flex'
       canvasFrame.style.pointerEvents = 'auto' // 兜底：任何异常路径下画布都可交互
-      if (canvasFrame.getAttribute('src') !== '/company') canvasFrame.setAttribute('src', '/company')
+      if (canvasFrame.getAttribute('src') !== canvasSrc()) canvasFrame.setAttribute('src', canvasSrc())
       syncCanvasHeight()
     } else {
       canvasWrap.style.display = 'none'
-      if (canvasFrame.getAttribute('src') === '/company') canvasFrame.removeAttribute('src')
+      if (canvasFrame.getAttribute('src') === canvasSrc()) canvasFrame.removeAttribute('src')
     }
   }
   function syncCanvasHeight() {
@@ -276,11 +341,11 @@
   const tabs = el('div', { display: 'flex', gap: '4px', padding: '8px 10px 0' })
   const body = el('div', { padding: '10px', overflowY: 'auto', overflowX: 'hidden', flex: '1', minHeight: '60px' })
   // 部门实时对话区：固定在选项卡上方，有活动时自动出现（聊天气泡样式，边生成边显示）
-  const liveWrap = el('div', { display: 'none', padding: '8px 10px 4px', borderBottom: '1px solid #1f2937', background: '#0b0f19' })
+  const liveWrap = el('div', { display: 'none', padding: '8px 10px 4px', borderBottom: '1px solid var(--cp-border)', background: 'var(--cp-bg)' })
   liveWrap.id = 'company-live-wrap'
-  const footer = el('div', { padding: '7px 12px', borderTop: '1px solid #1f2937', fontSize: '10px', color: '#6b7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, [
+  const footer = el('div', { padding: '7px 12px', borderTop: '1px solid var(--cp-border)', fontSize: '10px', color: 'var(--cp-mute)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, [
     el('span', null, '批准门禁 · 合同冻结 · 所有权互斥 · FAIL→全新 Repair Generator · 2修1重规划后暂停'),
-    el('span', { fontSize: '10px', color: '#4b5563' }, '🗺 画布默认显示 · 「显示详细信息」切到列表 · 拖任意边界调整大小'),
+    el('span', { fontSize: '10px', color: 'var(--cp-faint)' }, '🗺 画布默认显示 · 「显示详细信息」切到列表 · 拖任意边界调整大小'),
   ])
   panel.appendChild(header); panel.appendChild(tabs); panel.appendChild(body); panel.appendChild(footer)
 
@@ -353,7 +418,7 @@
   gripSvg.style.position = 'absolute'; gripSvg.style.right = '3px'; gripSvg.style.bottom = '3px'; gripSvg.style.pointerEvents = 'none'
   const gripPath = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   gripPath.setAttribute('d', 'M13 13 L4 13 M13 13 L13 4 M9 13 L13 9')
-  gripPath.setAttribute('stroke', '#4b5563'); gripPath.setAttribute('stroke-width', '1.5'); gripPath.setAttribute('fill', 'none')
+  gripPath.setAttribute('stroke', 'var(--cp-faint)'); gripPath.setAttribute('stroke-width', '1.5'); gripPath.setAttribute('fill', 'none')
   gripSvg.appendChild(gripPath)
   grip.appendChild(gripSvg)
   grip.addEventListener('pointerdown', function (e) { startResize(e, 'se') })
@@ -486,7 +551,7 @@
     const oldHint = panel.querySelector('#company-scope-hint')
     if (oldHint) oldHint.remove()
     if (scopeHint) {
-      const hint = el('div', { margin: '6px 10px 0', padding: '6px 10px', background: '#2b1b10', border: '1px solid #b45309', borderRadius: '8px', fontSize: '11px', color: '#fdba74' }, scopeHint)
+      const hint = el('div', { margin: '6px 10px 0', padding: '6px 10px', background: '#2b1b10', border: '1px solid #b45309', borderRadius: '8px', fontSize: '11px', color: 'var(--cp-warn)' }, scopeHint)
       hint.id = 'company-scope-hint'
       panel.insertBefore(hint, tabs)
     }
@@ -494,45 +559,45 @@
   }
 
   function bar(color, ratio, height) {
-    const wrap = el('div', { flex: '1', background: '#1f2937', borderRadius: '4px', height: (height || 6) + 'px', overflow: 'hidden' })
+    const wrap = el('div', { flex: '1', background: 'var(--cp-border)', borderRadius: '4px', height: (height || 6) + 'px', overflow: 'hidden' })
     wrap.appendChild(el('div', { width: Math.max(2, Math.round(ratio * 100)) + '%', height: '100%', background: color, borderRadius: '4px' }))
     return wrap
   }
 
   function renderTasks() {
     if (tasks.length === 0) {
-      body.appendChild(el('div', { color: '#9ca3af', fontSize: '12px' }, '暂无任务。对话中用 company_start 启动（如「公司模式：帮我做一个待办应用」）。'))
+      body.appendChild(el('div', { color: 'var(--cp-dim)', fontSize: '12px' }, '暂无任务。对话中用 company_start 启动（如「公司模式：帮我做一个待办应用」）。'))
       return
     }
     for (const t of tasks) {
       const color = STATUS_COLOR[t.status] || '#64748b'
       const stageIdx = STAGES.indexOf(t.status)
-      const card = el('div', { border: '1px solid #1f2937', borderRadius: '10px', padding: '10px', marginBottom: '8px', background: '#0b0f19', cursor: 'pointer' })
+      const card = el('div', { border: '1px solid var(--cp-border)', borderRadius: '10px', padding: '10px', marginBottom: '8px', background: 'var(--cp-bg)', cursor: 'pointer' })
       const head = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' })
       head.appendChild(el('span', { fontWeight: '600', fontSize: '14px' }, t.taskId))
-      head.appendChild(el('span', { fontSize: '11px', padding: '3px 10px', borderRadius: '10px', background: color, color: '#0b0f19', fontWeight: '700' }, t.status))
+      head.appendChild(el('span', { fontSize: '11px', padding: '3px 10px', borderRadius: '10px', background: color, color: 'var(--cp-bg)', fontWeight: '700' }, t.status))
       card.appendChild(head)
-      card.appendChild(el('div', { marginTop: '4px', fontSize: '12px', color: '#9ca3af' },
+      card.appendChild(el('div', { marginTop: '4px', fontSize: '12px', color: 'var(--cp-dim)' },
         (TYPE_LABEL[t.type] || t.type) + ' · ' + t.mode + ' · Sprint ' + (t.currentSprint || '-') + ' · 修复 ' + t.repairs + ' · ' + t.sprintsDone + '/' + t.sprintTotal + ' Sprint'))
       if (stageIdx >= 0) {
         const pg = el('div', { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' })
-        pg.appendChild(el('span', { fontSize: '10px', color: '#6b7280', width: '64px', flex: 'none' }, '流程 ' + stageIdx + '/' + (STAGES.length - 1)))
+        pg.appendChild(el('span', { fontSize: '10px', color: 'var(--cp-mute)', width: '64px', flex: 'none' }, '流程 ' + stageIdx + '/' + (STAGES.length - 1)))
         pg.appendChild(bar(color, stageIdx / (STAGES.length - 1), 6))
         card.appendChild(pg)
       }
       if (t.sprintTotal > 0) {
         const sp2 = el('div', { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' })
-        sp2.appendChild(el('span', { fontSize: '10px', color: '#6b7280', width: '64px', flex: 'none' }, 'Sprint ' + t.sprintsDone + '/' + t.sprintTotal))
+        sp2.appendChild(el('span', { fontSize: '10px', color: 'var(--cp-mute)', width: '64px', flex: 'none' }, 'Sprint ' + t.sprintsDone + '/' + t.sprintTotal))
         sp2.appendChild(bar('#22c55e', t.sprintTotal > 0 ? t.sprintsDone / t.sprintTotal : 0, 6))
         card.appendChild(sp2)
       }
       const isDetail = detail && detail.taskId === t.taskId
       if (isDetail && detail.history) {
-        const box = el('div', { marginTop: '6px', fontSize: '11px', color: '#cbd5e1', borderTop: '1px solid #1f2937', paddingTop: '6px' })
+        const box = el('div', { marginTop: '6px', fontSize: '11px', color: 'var(--cp-text2)', borderTop: '1px solid var(--cp-border)', paddingTop: '6px' })
         if (detail.nextSteps && detail.nextSteps.length) {
           for (const s of detail.nextSteps) box.appendChild(el('div', { marginBottom: '2px' }, '\u2192 ' + s))
         }
-        box.appendChild(el('div', { marginTop: '6px', color: '#6b7280', fontSize: '10px' }, '最近状态变化：'))
+        box.appendChild(el('div', { marginTop: '6px', color: 'var(--cp-mute)', fontSize: '10px' }, '最近状态变化：'))
         for (const h of detail.history.slice().reverse().slice(0, 6)) {
           box.appendChild(el('div', { marginBottom: '2px' }, h.from + ' \u2192 ' + h.to + '  ' + h.reason))
         }
@@ -563,35 +628,35 @@
 
   function renderTokens() {
     if (!tokenData || !tokenData.rows || tokenData.rows.length === 0) {
-      body.appendChild(el('div', { color: '#9ca3af', fontSize: '12px' }, '暂无 Token 数据（采样中…）'))
+      body.appendChild(el('div', { color: 'var(--cp-dim)', fontSize: '12px' }, '暂无 Token 数据（采样中…）'))
       return
     }
     const root = tokenData.rows.filter(function (r) { return r.isRoot })[0] || tokenData.rows[0]
     if (root && !root.error) {
-      const card = el('div', { border: '1px solid #1f2937', borderRadius: '10px', padding: '10px', marginBottom: '8px', background: '#0b0f19' })
+      const card = el('div', { border: '1px solid var(--cp-border)', borderRadius: '10px', padding: '10px', marginBottom: '8px', background: 'var(--cp-bg)' })
       const label = root.title || (root.isRoot ? '主会话' : '会话')
       const headLine = el('div', { fontWeight: '600', marginBottom: '6px' })
       headLine.appendChild(document.createTextNode('\u26A1 ' + label + '（实时 Token）'))
-      if (root.model) headLine.appendChild(el('span', { color: '#7dd3fc' }, ' · ' + root.model + (root.modelProvider ? '（' + root.modelProvider + '）' : '')))
+      if (root.model) headLine.appendChild(el('span', { color: 'var(--cp-info)' }, ' · ' + root.model + (root.modelProvider ? '（' + root.modelProvider + '）' : '')))
       card.appendChild(headLine)
       const big = el('div', { display: 'flex', alignItems: 'baseline', gap: '8px' })
       big.appendChild(el('span', { fontSize: '26px', fontWeight: '800', color: '#f59e0b' }, fmtFull(root.totalTokens)))
-      big.appendChild(el('span', { fontSize: '11px', color: '#9ca3af' }, '总 Token（请求+响应估算）'))
+      big.appendChild(el('span', { fontSize: '11px', color: 'var(--cp-dim)' }, '总 Token（请求+响应估算）'))
       card.appendChild(big)
       if (root.baseline && root.baseline.kind === 'usage') {
         const split = el('div', { display: 'flex', gap: '8px', marginTop: '6px' })
         const total = root.baseline.tokens || 1
         split.appendChild(el('div', { flex: '1' }, [
-          el('div', { fontSize: '10px', color: '#9ca3af' }, '输入 ' + fmt(root.baseline.inputTokens)),
+          el('div', { fontSize: '10px', color: 'var(--cp-dim)' }, '输入 ' + fmt(root.baseline.inputTokens)),
           bar('#3b82f6', root.baseline.inputTokens / total, 6),
         ]))
         split.appendChild(el('div', { flex: '1' }, [
-          el('div', { fontSize: '10px', color: '#9ca3af' }, '输出 ' + fmt(root.baseline.outputTokens)),
+          el('div', { fontSize: '10px', color: 'var(--cp-dim)' }, '输出 ' + fmt(root.baseline.outputTokens)),
           bar('#22c55e', root.baseline.outputTokens / total, 6),
         ]))
         card.appendChild(split)
       }
-      card.appendChild(el('div', { fontSize: '10px', color: '#6b7280', marginTop: '6px' }, '上下文表面 ' + fmt(root.surfaceTokens) + ' tokens · 增量 ' + fmt(root.surfaceDeltaTokens)))
+      card.appendChild(el('div', { fontSize: '10px', color: 'var(--cp-mute)', marginTop: '6px' }, '上下文表面 ' + fmt(root.surfaceTokens) + ' tokens · 增量 ' + fmt(root.surfaceDeltaTokens)))
       if (tokenData.history && tokenData.history.length >= 2) {
         card.appendChild(sparkline(tokenData.history))
       }
@@ -599,28 +664,28 @@
     }
     const children = tokenData.rows.filter(function (r) { return !r.isRoot })
     if (children.length) {
-      body.appendChild(el('div', { fontSize: '11px', color: '#9ca3af', margin: '4px 0' }, '子代理会话（分层）· 共 ' + children.length + ' 个'))
+      body.appendChild(el('div', { fontSize: '11px', color: 'var(--cp-dim)', margin: '4px 0' }, '子代理会话（分层）· 共 ' + children.length + ' 个'))
       const maxT = Math.max.apply(null, children.map(function (r) { return r.totalTokens || 0 }).concat([1]))
       for (const c of children) {
         const name = roleLabel(c)
         const full = (c.title || '') + ' [' + (c.id || '') + ']'
         const isLive = c.live === true
-        const card = el('div', { padding: '7px 8px', marginBottom: '6px', background: '#0b0f19', border: '1px solid #1f2937', borderRadius: '8px', cursor: 'pointer' })
+        const card = el('div', { padding: '7px 8px', marginBottom: '6px', background: 'var(--cp-bg)', border: '1px solid var(--cp-border)', borderRadius: '8px', cursor: 'pointer' })
         card.title = '点击查看实时思考/对话'
         card.addEventListener('click', function () { openTranscript(c.id, name, c.model) })
         const line1 = el('div', { display: 'flex', alignItems: 'center', gap: '8px' })
         line1.appendChild(el('span', { flex: 'none', fontSize: '10px', width: '10px' }, isLive ? '🟢' : '⚪'))
-        const nameSpan = el('span', { flex: '1', minWidth: '0', fontSize: '12px', fontWeight: '600', color: '#e5e7eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, name + (isLive ? '（工作中 · 点开看实时思考）' : ''))
+        const nameSpan = el('span', { flex: '1', minWidth: '0', fontSize: '12px', fontWeight: '600', color: 'var(--cp-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, name + (isLive ? '（工作中 · 点开看实时思考）' : ''))
         nameSpan.title = full
         line1.appendChild(nameSpan)
-        line1.appendChild(el('span', { flex: 'none', fontSize: '10px', color: '#7dd3fc', padding: '2px 8px', borderRadius: '8px', background: '#0e2a43', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, c.model ? c.model + (c.modelProvider ? '（' + c.modelProvider + '）' : '') : '模型待定'))
+        line1.appendChild(el('span', { flex: 'none', fontSize: '10px', color: 'var(--cp-info)', padding: '2px 8px', borderRadius: '8px', background: 'var(--cp-chip)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, c.model ? c.model + (c.modelProvider ? '（' + c.modelProvider + '）' : '') : '模型待定'))
         card.appendChild(line1)
         const line2 = el('div', { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' })
         line2.appendChild(bar('#8b5cf6', (c.totalTokens || 0) / maxT, 6))
         const usage = c.baseline && c.baseline.kind === 'usage'
           ? '输入 ' + fmt(c.baseline.inputTokens) + ' · 输出 ' + fmt(c.baseline.outputTokens) + ' · 合计 ' + fmt(c.totalTokens)
           : '合计 ' + fmt(c.totalTokens) + '（用量不可获得）'
-        line2.appendChild(el('span', { flex: 'none', fontSize: '10px', color: '#9ca3af', whiteSpace: 'nowrap' }, usage))
+        line2.appendChild(el('span', { flex: 'none', fontSize: '10px', color: 'var(--cp-dim)', whiteSpace: 'nowrap' }, usage))
         card.appendChild(line2)
         body.appendChild(card)
       }
@@ -629,7 +694,7 @@
 
   function sparkline(history) {
     const box = el('div', { marginTop: '8px' })
-    box.appendChild(el('div', { fontSize: '10px', color: '#9ca3af', marginBottom: '4px' }, 'Token 增长曲线（5s 采样 · 最近 ' + history.length + ' 点）'))
+    box.appendChild(el('div', { fontSize: '10px', color: 'var(--cp-dim)', marginBottom: '4px' }, 'Token 增长曲线（5s 采样 · 最近 ' + history.length + ' 点）'))
     const W = Math.max(260, panelSize.w - 84), H = 48
     const vals = history.map(function (h) { return h.total })
     const min = Math.min.apply(null, vals)
@@ -648,23 +713,23 @@
     poly.setAttribute('fill', 'none'); poly.setAttribute('stroke', '#f59e0b'); poly.setAttribute('stroke-width', '1.5')
     svg.appendChild(poly)
     box.appendChild(svg)
-    box.appendChild(el('div', { fontSize: '10px', color: '#6b7280' }, fmt(max) + ' 峰值 · ' + fmt(vals[vals.length - 1]) + ' 当前'))
+    box.appendChild(el('div', { fontSize: '10px', color: 'var(--cp-mute)' }, fmt(max) + ' 峰值 · ' + fmt(vals[vals.length - 1]) + ' 当前'))
     return box
   }
 
   function renderAgents() {
     if (agentEntries.length === 0) {
-      body.appendChild(el('div', { color: '#9ca3af', fontSize: '12px' }, '暂无子代理调用记录（用 subagent/workflow 派工后这里实时出现，且持久累积）。'))
+      body.appendChild(el('div', { color: 'var(--cp-dim)', fontSize: '12px' }, '暂无子代理调用记录（用 subagent/workflow 派工后这里实时出现，且持久累积）。'))
       return
     }
     const ended = {}
     agentEntries.forEach(function (e) { if (e.kind === 'end' && e.id) ended[e.id] = true })
-    body.appendChild(el('div', { fontSize: '11px', color: '#9ca3af', margin: '0 0 6px' }, '共 ' + agentTotal + ' 条（持久累积，跨重启保留；下方为最近 ' + agentEntries.length + ' 条）。💭 点任意一行查看该子代理的实时思考/对话。'))
+    body.appendChild(el('div', { fontSize: '11px', color: 'var(--cp-dim)', margin: '0 0 6px' }, '共 ' + agentTotal + ' 条（持久累积，跨重启保留；下方为最近 ' + agentEntries.length + ' 条）。💭 点任意一行查看该子代理的实时思考/对话。'))
     for (const e of agentEntries) {
       const isStart = e.kind === 'start'
       const running = isStart && e.id && !ended[e.id]
       const color = isStart ? '#3b82f6' : (e.stopReason && String(e.stopReason).toLowerCase().indexOf('error') >= 0 ? '#ef4444' : '#22c55e')
-      const row = el('div', { display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', borderBottom: '1px solid #1f2937', cursor: e.id ? 'pointer' : 'default' })
+      const row = el('div', { display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', borderBottom: '1px solid var(--cp-border)', cursor: e.id ? 'pointer' : 'default' })
       if (e.id) {
         row.title = '查看实时思考/对话'
         row.addEventListener('click', function () {
@@ -672,12 +737,12 @@
           openTranscript(e.id, role, e.model)
         })
       }
-      row.appendChild(el('span', { fontSize: '10px', width: '64px', flex: 'none', color: '#6b7280' }, (e.at || '').slice(11, 19)))
-      row.appendChild(el('span', { fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: color, color: '#0b0f19', fontWeight: '700', width: '40px', textAlign: 'center', flex: 'none' }, isStart ? '启动' : '结束'))
+      row.appendChild(el('span', { fontSize: '10px', width: '64px', flex: 'none', color: 'var(--cp-mute)' }, (e.at || '').slice(11, 19)))
+      row.appendChild(el('span', { fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: color, color: 'var(--cp-bg)', fontWeight: '700', width: '40px', textAlign: 'center', flex: 'none' }, isStart ? '启动' : '结束'))
       row.appendChild(el('span', { flex: 'none', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '150px' }, e.provider + ' · ' + String(e.id).slice(0, 8)))
-      row.appendChild(el('span', { flex: '1', fontSize: '11px', color: '#7dd3fc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, e.model ? e.model + (e.modelProvider ? '（' + e.modelProvider + '）' : '') : '模型待定'))
-      if (running) row.appendChild(el('span', { fontSize: '10px', color: '#86efac', flex: 'none', fontWeight: '700' }, '🟢 工作中 · 💭实时'))
-      if (!isStart && e.stopReason) row.appendChild(el('span', { fontSize: '10px', color: '#9ca3af', flex: 'none' }, String(e.stopReason).slice(0, 18)))
+      row.appendChild(el('span', { flex: '1', fontSize: '11px', color: 'var(--cp-info)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, e.model ? e.model + (e.modelProvider ? '（' + e.modelProvider + '）' : '') : '模型待定'))
+      if (running) row.appendChild(el('span', { fontSize: '10px', color: 'var(--cp-ok)', flex: 'none', fontWeight: '700' }, '🟢 工作中 · 💭实时'))
+      if (!isStart && e.stopReason) row.appendChild(el('span', { fontSize: '10px', color: 'var(--cp-dim)', flex: 'none' }, String(e.stopReason).slice(0, 18)))
       body.appendChild(row)
     }
   }
@@ -730,14 +795,14 @@
     if (!badge) return
     const modelTxt = model ? ' · ' + model + (provider ? '（' + provider + '）' : '') : ''
     if (live) {
-      badge.style.background = '#0a2a14'
-      badge.style.color = '#86efac'
+      badge.style.background = 'var(--cp-ok-bg)'
+      badge.style.color = 'var(--cp-ok)'
       badge.style.border = '1px solid #22c55e'
       badge.textContent = '🟢 工作中 · 实时跟随' + modelTxt
     } else {
-      badge.style.background = '#1f2937'
-      badge.style.color = '#9ca3af'
-      badge.style.border = '1px solid #374151'
+      badge.style.background = 'var(--cp-border)'
+      badge.style.color = 'var(--cp-dim)'
+      badge.style.border = '1px solid var(--cp-border2)'
       badge.textContent = '⚪ 已结束' + modelTxt
     }
   }
@@ -785,18 +850,18 @@
     s.id = 'company-tc-styles'
     s.textContent = [
       '#tc-list { display:flex; flex-direction:column; gap:8px; }',
-      '.tc-user, .tc-assistant { border:1px solid #1f2937; border-radius:10px; padding:8px 10px; background:#0b0f19; }',
-      '.tc-user pre, .tc-assistant pre { margin:6px 0 0; padding:8px; background:#111827; border:1px solid #1f2937; border-radius:8px; font-size:11px; white-space:pre-wrap; word-break:break-word; color:#cbd5e1; max-height:260px; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }',
-      '.tc-meta { font-size:10.5px; color:#6b7280; margin-bottom:4px; }',
-      '.tc-k { font-size:10px; color:#6b7280; margin-top:6px; }',
-      '.tc-text { white-space:pre-wrap; word-break:break-word; color:#e5e7eb; }',
-      '.tc-think summary, .tc-tool summary { cursor:pointer; color:#7dd3fc; font-size:11px; font-weight:600; }',
-      '.tc-think pre { background:#0e2a43; border-color:#1e4a6b; color:#bfdbfe; }',
-      '.tc-err { color:#fca5a5; border-color:#7f1d1d !important; }',
+      '.tc-user, .tc-assistant { border:1px solid var(--cp-border); border-radius:10px; padding:8px 10px; background:var(--cp-bg); }',
+      '.tc-user pre, .tc-assistant pre { margin:6px 0 0; padding:8px; background:var(--cp-panel); border:1px solid var(--cp-border); border-radius:8px; font-size:11px; white-space:pre-wrap; word-break:break-word; color:var(--cp-text2); max-height:260px; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }',
+      '.tc-meta { font-size:10.5px; color:var(--cp-mute); margin-bottom:4px; }',
+      '.tc-k { font-size:10px; color:var(--cp-mute); margin-top:6px; }',
+      '.tc-text { white-space:pre-wrap; word-break:break-word; color:var(--cp-text); }',
+      '.tc-think summary, .tc-tool summary { cursor:pointer; color:var(--cp-info); font-size:11px; font-weight:600; }',
+      '.tc-think pre { background:var(--cp-chip); border-color:var(--cp-chipb); color:var(--cp-think-s); }',
+      '.tc-err { color:var(--cp-err); border-color:#7f1d1d !important; }',
       '.tc-partial { border-color:#a78bfa; }',
       '.tc-cur { animation:tcBlink 0.9s steps(2) infinite; color:#a78bfa; }',
       '@keyframes tcBlink { 50% { opacity:0; } }',
-      '.tc-empty { color:#6b7280; font-size:12px; padding:12px 4px; }',
+      '.tc-empty { color:var(--cp-mute); font-size:12px; padding:12px 4px; }',
     ].join('\n')
     document.head.appendChild(s)
   }
@@ -807,10 +872,10 @@
     back.addEventListener('click', closeTranscript)
     tabs.appendChild(back)
     body.innerHTML = ''
-    const head = el('div', { padding: '2px 2px 10px', borderBottom: '1px solid #1f2937', marginBottom: '8px' })
-    head.appendChild(el('div', { fontWeight: '700', fontSize: '14px', color: '#e5e7eb' }, '💭 ' + (transcript.label || '子部门') + ' · 实时思考/对话'))
-    head.appendChild(el('div', { color: '#9ca3af', marginTop: '3px', fontSize: '11px' }, '会话 ' + String(transcript.sid || '').slice(0, 8) + ' · 1.5s 增量拉取 · 思考/对话/工具调用边生成边显示'))
-    const badge = el('span', { fontSize: '11px', padding: '2px 8px', borderRadius: '8px', background: '#1f2937', color: '#9ca3af', border: '1px solid #374151', marginLeft: '8px' }, '⚪ 状态未知')
+    const head = el('div', { padding: '2px 2px 10px', borderBottom: '1px solid var(--cp-border)', marginBottom: '8px' })
+    head.appendChild(el('div', { fontWeight: '700', fontSize: '14px', color: 'var(--cp-text)' }, '💭 ' + (transcript.label || '子部门') + ' · 实时思考/对话'))
+    head.appendChild(el('div', { color: 'var(--cp-dim)', marginTop: '3px', fontSize: '11px' }, '会话 ' + String(transcript.sid || '').slice(0, 8) + ' · 1.5s 增量拉取 · 思考/对话/工具调用边生成边显示'))
+    const badge = el('span', { fontSize: '11px', padding: '2px 8px', borderRadius: '8px', background: 'var(--cp-border)', color: 'var(--cp-dim)', border: '1px solid var(--cp-border2)', marginLeft: '8px' }, '⚪ 状态未知')
     badge.id = 'tc-badge'
     head.appendChild(badge)
     body.appendChild(head)
@@ -928,7 +993,7 @@
     liveWrap.style.display = 'block'
     liveWrap.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
       '<span style="font-weight:700;font-size:12px;color:#a78bfa;">💭 部门实时对话（边生成边显示 · 1.5s 增量）</span>' +
-      '<span style="font-size:10px;color:#6b7280;">' + (live.length ? live.length + ' 个部门工作中' : '暂无进行中部门') + ' · 点击卡片查看完整对话</span></div>' +
+      '<span style="font-size:10px;color:var(--cp-mute);">' + (live.length ? live.length + ' 个部门工作中' : '暂无进行中部门') + ' · 点击卡片查看完整对话</span></div>' +
       '<div class="lf-list" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;">' + show.map(lfCardHtml).join('') + '</div>'
     lfBindClicks(liveWrap)
   }
@@ -944,10 +1009,10 @@
     const sig = lfContentSig(show) + '|' + (dockCollapsed ? 'c' : 'o')
     if (dock.dataset.sig === sig) return
     dock.dataset.sig = sig
-    const head = '<div class="lf-dock-head" id="lf-dock-head" style="cursor:grab;user-select:none;display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1f2937;border-bottom:1px solid #374151;">' +
+    const head = '<div class="lf-dock-head" id="lf-dock-head" style="cursor:grab;user-select:none;display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cp-border);border-bottom:1px solid var(--cp-border2);">' +
       '<span style="flex:1;font-weight:700;font-size:12.5px;color:#a78bfa;">💭 部门实时对话' + (live.length ? ' · ' + live.length + ' 个工作中' : '') + '</span>' +
-      '<button class="lf-dbtn" data-act="collapse" style="pointer-events:auto;cursor:pointer;background:transparent;border:1px solid #4b5563;color:#9ca3af;border-radius:6px;font-size:11px;padding:2px 8px;">' + (dockCollapsed ? '▤' : '▁') + '</button>' +
-      '<button class="lf-dbtn" data-act="dismiss" style="pointer-events:auto;cursor:pointer;background:transparent;border:1px solid #4b5563;color:#9ca3af;border-radius:6px;font-size:11px;padding:2px 8px;">✕</button>' +
+      '<button class="lf-dbtn" data-act="collapse" style="pointer-events:auto;cursor:pointer;background:transparent;border:1px solid var(--cp-faint);color:var(--cp-dim);border-radius:6px;font-size:11px;padding:2px 8px;">' + (dockCollapsed ? '▤' : '▁') + '</button>' +
+      '<button class="lf-dbtn" data-act="dismiss" style="pointer-events:auto;cursor:pointer;background:transparent;border:1px solid var(--cp-faint);color:var(--cp-dim);border-radius:6px;font-size:11px;padding:2px 8px;">✕</button>' +
       '</div>'
     const bodyHtml = dockCollapsed ? '' : '<div class="lf-list" style="padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(44vh - 46px);">' + show.map(lfCardHtml).join('') + '</div>'
     dock.innerHTML = head + bodyHtml
@@ -1039,48 +1104,38 @@
     const s = document.createElement('style')
     s.id = 'company-lf-styles'
     s.textContent = [
-      '.lf-card { border:1px solid #374151; border-radius:10px; background:#0b0f19; overflow:hidden; }',
-      '.lf-head { display:flex; align-items:center; gap:6px; padding:6px 10px; background:#111827; border-bottom:1px solid #1f2937; flex-wrap:wrap; }',
-      '.lf-name { font-weight:700; font-size:12px; color:#e5e7eb; }',
-      '.lf-model { font-size:10px; color:#7dd3fc; background:#0e2a43; padding:1px 6px; border-radius:8px; }',
-      '.lf-status { font-size:10px; color:#86efac; }',
+      '.lf-card { border:1px solid var(--cp-border2); border-radius:10px; background:var(--cp-bg); overflow:hidden; }',
+      '.lf-head { display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--cp-panel); border-bottom:1px solid var(--cp-border); flex-wrap:wrap; }',
+      '.lf-name { font-weight:700; font-size:12px; color:var(--cp-text); }',
+      '.lf-model { font-size:10px; color:var(--cp-info); background:var(--cp-chip); padding:1px 6px; border-radius:8px; }',
+      '.lf-status { font-size:10px; color:var(--cp-ok); }',
       '.lf-body { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }',
-      '.lf-user { font-size:11px; color:#9ca3af; border-left:2px solid #3b82f6; padding-left:8px; white-space:pre-wrap; word-break:break-word; }',
-      '.lf-think { display:flex; align-items:baseline; gap:6px; cursor:pointer; font-size:11px; color:#93c5fd; background:#0e2a43; border:1px solid #1e4a6b; border-radius:6px; padding:4px 8px; }',
+      '.lf-user { font-size:11px; color:var(--cp-dim); border-left:2px solid #3b82f6; padding-left:8px; white-space:pre-wrap; word-break:break-word; }',
+      '.lf-think { display:flex; align-items:baseline; gap:6px; cursor:pointer; font-size:11px; color:var(--cp-think); background:var(--cp-chip); border:1px solid var(--cp-chipb); border-radius:6px; padding:4px 8px; }',
       '.lf-think-ic { flex:none; }',
       '.lf-think-t { flex:none; font-weight:600; }',
-      '.lf-think-s { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#bfdbfe; flex:1; min-width:0; }',
-      '.lf-think-full { margin-top:4px; white-space:pre-wrap; word-break:break-word; color:#bfdbfe; border-top:1px dashed #1e4a6b; padding-top:4px; font-size:11px; }',
-      '.lf-text { white-space:pre-wrap; word-break:break-word; color:#e5e7eb; font-size:12px; line-height:1.55; }',
-      '.lf-tool { font-size:11px; color:#c4b5fd; background:#150b2e; border:1px solid #4c1d95; border-radius:6px; padding:4px 8px; }',
+      '.lf-think-s { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--cp-think-s); flex:1; min-width:0; }',
+      '.lf-think-full { margin-top:4px; white-space:pre-wrap; word-break:break-word; color:var(--cp-think-s); border-top:1px dashed var(--cp-chipb); padding-top:4px; font-size:11px; }',
+      '.lf-text { white-space:pre-wrap; word-break:break-word; color:var(--cp-text); font-size:12px; line-height:1.55; }',
+      '.lf-tool { font-size:11px; color:var(--cp-accent1); background:var(--cp-tool-bg); border:1px solid var(--cp-tool-b); border-radius:6px; padding:4px 8px; }',
       '.lf-tool b { color:#a78bfa; }',
       '.lf-tool-args { color:#8b5cf6; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; word-break:break-all; }',
-      '.lf-res { margin-top:4px; color:#9ca3af; font-size:10.5px; white-space:pre-wrap; word-break:break-word; border-top:1px solid #312e81; padding-top:4px; }',
-      '.lf-res-err { color:#fca5a5; }',
+      '.lf-res { margin-top:4px; color:var(--cp-dim); font-size:10.5px; white-space:pre-wrap; word-break:break-word; border-top:1px solid var(--cp-tool-t); padding-top:4px; }',
+      '.lf-res-err { color:var(--cp-err); }',
       '.lf-cur { animation:tcBlink .9s steps(2) infinite; color:#a78bfa; }',
       '.lf-foot { padding:2px 10px 6px; text-align:right; }',
-      '.lf-btn { cursor:pointer; background:transparent; border:1px solid #a78bfa; color:#c4b5fd; border-radius:6px; font-size:11px; padding:3px 10px; }',
-      '.lf-empty { color:#6b7280; font-size:11px; padding:6px 2px; }',
-      '.tc-md { white-space:pre-wrap; word-break:break-word; color:#cbd5e1; font-size:11.5px; line-height:1.6; }',
-      '.lf-code { margin:6px 0; padding:7px 9px; background:#0f172a; border:1px solid #1f2937; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; white-space:pre-wrap; word-break:break-word; color:#cbd5e1; max-height:220px; overflow:auto; }',
-      '.lf-code-i { background:#1f2937; border-radius:4px; padding:0 4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; color:#7dd3fc; }',
+      '.lf-btn { cursor:pointer; background:transparent; border:1px solid #a78bfa; color:var(--cp-accent1); border-radius:6px; font-size:11px; padding:3px 10px; }',
+      '.lf-empty { color:var(--cp-mute); font-size:11px; padding:6px 2px; }',
+      '.tc-md { white-space:pre-wrap; word-break:break-word; color:var(--cp-text2); font-size:11.5px; line-height:1.6; }',
+      '.lf-code { margin:6px 0; padding:7px 9px; background:var(--cp-code); border:1px solid var(--cp-border); border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; white-space:pre-wrap; word-break:break-word; color:var(--cp-text2); max-height:220px; overflow:auto; }',
+      '.lf-code-i { background:var(--cp-border); border-radius:4px; padding:0 4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; color:var(--cp-info); }',
       '.lf-h { display:block; margin:4px 0 2px; font-weight:700; }',
-      '@media (prefers-color-scheme: light) {',
-      '  .lf-card { border-color:#e2e8f0; background:#ffffff; }',
-      '  .lf-head { background:#f8fafc; border-color:#e2e8f0; }',
-      '  .lf-name { color:#1e293b; }',
-      '  .lf-text { color:#1e293b; }',
-      '  .lf-user { color:#64748b; }',
-      '  .lf-think { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }',
-      '  .lf-think-s, .lf-think-full { color:#1e40af; }',
-      '  .lf-tool { background:#f5f3ff; border-color:#ddd6fe; color:#6d28d9; }',
-      '  .lf-res { color:#64748b; }',
-      '}',
     ].join('\n')
     document.head.appendChild(s)
   }
   injectLiveStyles()
 
+  applyTheme()
   render()
   refreshAll()
   setInterval(function () { if (open) refreshAll() }, 2000)

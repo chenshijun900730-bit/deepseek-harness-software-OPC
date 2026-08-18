@@ -16,6 +16,19 @@
       --shadow-card:0 4px 16px rgba(15,23,42,.10); --shadow-pop:0 8px 24px rgba(15,23,42,.18);
     }
   }
+  /* 面板主题选择强制覆盖（?theme= 或 company-theme postMessage；auto 时不设 data-theme 走系统） */
+  html[data-theme='dark'] .app {
+    --bg-app:#0b0f19; --bg-panel:#111827; --bg-canvas:#0d1117; --dot:#1f2937; --hover:#0b0f19;
+    --border:#1f2937; --border-strong:#374151; --border-soft:#141a26;
+    --text:#e5e7eb; --text-dim:#9ca3af; --text-mute:#6b7280;
+    --shadow-card:0 4px 16px rgba(0,0,0,.35); --shadow-pop:0 8px 24px rgba(0,0,0,.55);
+  }
+  html[data-theme='light'] .app {
+    --bg-app:#f8fafc; --bg-panel:#ffffff; --bg-canvas:#eef2f7; --dot:#cbd5e1; --hover:#f1f5f9;
+    --border:#e2e8f0; --border-strong:#cbd5e1; --border-soft:#e2e8f0;
+    --text:#1e293b; --text-dim:#475569; --text-mute:#64748b;
+    --shadow-card:0 4px 16px rgba(15,23,42,.10); --shadow-pop:0 8px 24px rgba(15,23,42,.18);
+  }
   .app { position:relative; width:1712px; background:var(--bg-app); border:1px solid var(--border); border-radius:14px; overflow:hidden;
          font-family:system-ui,sans-serif; color:var(--text); }
   .cap-strip { display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--bg-panel); border-bottom:1px solid var(--border); font-size:12px; }

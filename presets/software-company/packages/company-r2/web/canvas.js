@@ -12,6 +12,19 @@
     var qsScope = new URLSearchParams(window.location.search).get('scope')
     if (qsScope) STATE.scope = qsScope
   } catch (e) {}
+  // 面板主题联动：?theme=light|dark 或 company-theme postMessage；auto 走系统 prefers-color-scheme
+  function applyCanvasTheme(t) {
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t)
+    else document.documentElement.removeAttribute('data-theme')
+  }
+  try {
+    var qsTheme = new URLSearchParams(window.location.search).get('theme')
+    if (qsTheme === 'light' || qsTheme === 'dark') document.documentElement.setAttribute('data-theme', qsTheme)
+  } catch (e) {}
+  window.addEventListener('message', function (ev) {
+    if (!ev || !ev.data || ev.data.type !== 'company-theme') return
+    applyCanvasTheme(ev.data.theme)
+  })
   var DRAG = null
   var ACTIVE_EXEC = ['IMPLEMENTING', 'SELF_CHECK', 'INTEGRATING', 'QA_RUNNING', 'REPAIRING', 'REPLANNING', 'FINAL_E2E']
   function isWorkingNow(n) {
